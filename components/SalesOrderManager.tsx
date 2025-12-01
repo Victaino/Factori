@@ -3,8 +3,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
 import { SalesOrder, Customer, Product } from '../types';
 import { ShoppingCart, Plus, Trash2, Calendar, Users, Package, Pencil, Search, X } from 'lucide-react';
+import { useSettings } from '../contexts/SettingsContext';
 
 export const SalesOrderManager: React.FC = () => {
+  const { formatCurrency } = useSettings();
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -232,7 +234,7 @@ export const SalesOrderManager: React.FC = () => {
           <table className="w-full text-left text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
-                <th className="p-4 font-semibold text-gray-600">ID</th>
+                <th className="p-4 font-semibold text-gray-600">Sales Order ID</th>
                 <th className="p-4 font-semibold text-gray-600">Customer</th>
                 <th className="p-4 font-semibold text-gray-600">Product</th>
                 <th className="p-4 font-semibold text-gray-600">Order Date</th>
@@ -257,7 +259,7 @@ export const SalesOrderManager: React.FC = () => {
                   <td className="p-4 text-gray-600">{order.orderDate}</td>
                   <td className="p-4 text-gray-600">{order.deliveryDate}</td>
                   <td className="p-4 text-gray-600">{order.receivedDate || '-'}</td>
-                  <td className="p-4 text-gray-800 font-semibold">${order.totalAmount.toLocaleString()}</td>
+                  <td className="p-4 text-gray-800 font-semibold">{formatCurrency(order.totalAmount)}</td>
                   <td className="p-4">
                     <select 
                       value={order.status}
@@ -301,6 +303,16 @@ export const SalesOrderManager: React.FC = () => {
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">&times;</button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Sales Order ID</label>
+                <input 
+                  type="text" 
+                  readOnly 
+                  className="w-full border rounded-lg p-2 bg-gray-100 text-gray-500 font-mono text-sm"
+                  value={editingId || 'Auto-generated'} 
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
                 <select required className="w-full border rounded-lg p-2"
@@ -392,3 +404,4 @@ export const SalesOrderManager: React.FC = () => {
     </div>
   );
 };
+    

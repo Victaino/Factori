@@ -1,9 +1,12 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
 import { Deduction } from '../types';
 import { FileMinus, Trash2, Pencil, Search } from 'lucide-react';
+import { useSettings } from '../contexts/SettingsContext';
 
 export const DeductionManager: React.FC = () => {
+  const { formatCurrency } = useSettings();
   const [deductions, setDeductions] = useState<Deduction[]>([]);
 
   useEffect(() => {
@@ -130,7 +133,7 @@ export const DeductionManager: React.FC = () => {
                 ) : (
                     <div>
                       <p className="font-semibold text-gray-800">{ded.description}</p>
-                      <p className="text-sm text-gray-500 font-mono">${ded.amount.toFixed(2)}</p>
+                      <p className="text-sm text-gray-500 font-mono">{formatCurrency(ded.amount)}</p>
                     </div>
                 )}
 

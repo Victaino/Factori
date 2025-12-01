@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
 import { Material, Product, InventoryItem } from '../types';
 import { Plus, Trash2, Box, Package, ShoppingCart, Save, AlertTriangle, Pencil, Check, X, ArrowRightLeft, Image as ImageIcon, Search } from 'lucide-react';
+import { useSettings } from '../contexts/SettingsContext';
 
 type Tab = 'MATERIALS' | 'PRODUCTS' | 'INVENTORY';
 
@@ -11,9 +13,10 @@ interface InventoryRowProps {
   onDelete: (id: string) => void;
   onUpdate: (id: string, newQuantity: number) => void;
   onUpdateThreshold: (id: string, newThreshold: number) => void;
+  formatCurrency: (amount: number) => string;
 }
 
-const InventoryRow: React.FC<InventoryRowProps> = ({ item, productName, onDelete, onUpdate, onUpdateThreshold }) => {
+const InventoryRow: React.FC<InventoryRowProps> = ({ item, productName, onDelete, onUpdate, onUpdateThreshold, formatCurrency }) => {
   const [adjustment, setAdjustment] = useState('');
   const [threshold, setThreshold] = useState(item.lowStockThreshold?.toString() || '0');
 
@@ -80,13 +83,14 @@ const InventoryRow: React.FC<InventoryRowProps> = ({ item, productName, onDelete
           onBlur={handleThresholdBlur}
         />
       </td>
-      <td className="p-4 text-gray-600">${item.price.toLocaleString()}</td>
-      <td className="p-4 text-gray-800 font-medium">${(item.quantity * item.price).toLocaleString()}</td>
+      <td className="p-4 text-gray-600">{formatCurrency(item.price)}</td>
+      <td className="p-4 text-gray-800 font-medium">{formatCurrency(item.quantity * item.price)}</td>
     </tr>
   );
 };
 
 export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 'INVENTORY' }) => {
+  const { formatCurrency } = useSettings();
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -300,6 +304,7 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
                     onDelete={() => {}} // Inventory deletion handled via Product deletion for now
                     onUpdate={handleUpdateInventory}
                     onUpdateThreshold={handleUpdateThreshold}
+                    formatCurrency={formatCurrency}
                   />
                 ))}
                 {filteredInventory.length === 0 && (
@@ -334,9 +339,9 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
                 {filteredMaterials.map(m => (
                   <tr key={m.id} className="hover:bg-gray-50">
                     <td className="p-4 font-medium text-gray-800">{m.name}</td>
-                    <td className="p-4 text-gray-600">${m.price.toLocaleString()}</td>
+                    <td className="p-4 text-gray-600">{formatCurrency(m.price)}</td>
                     <td className="p-4 text-gray-600">{m.quantity}</td>
-                    <td className="p-4 text-gray-800 font-medium">${m.amount.toLocaleString()}</td>
+                    <td className="p-4 text-gray-800 font-medium">{formatCurrency(m.amount)}</td>
                     <td className="p-4 text-right flex justify-end gap-2">
                        <button onClick={() => handleEdit(m, 'MATERIAL')} className="text-blue-400 hover:text-blue-600"><Pencil size={18}/></button>
                        <button onClick={() => handleDelete(m.id, 'MATERIAL')} className="text-red-400 hover:text-red-600"><Trash2 size={18}/></button>
@@ -385,9 +390,9 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
                       </div>
                     </td>
                     <td className="p-4 font-medium text-gray-800">{p.name}</td>
-                    <td className="p-4 text-gray-600">${p.price.toLocaleString()}</td>
+                    <td className="p-4 text-gray-600">{formatCurrency(p.price)}</td>
                     <td className="p-4 text-gray-600">{p.quantity}</td>
-                    <td className="p-4 text-gray-800 font-medium">${p.amount.toLocaleString()}</td>
+                    <td className="p-4 text-gray-800 font-medium">{formatCurrency(p.amount)}</td>
                     <td className="p-4 text-right flex justify-end gap-2">
                         <button onClick={() => handleEdit(p, 'PRODUCT')} className="text-blue-400 hover:text-blue-600"><Pencil size={18}/></button>
                         <button onClick={() => handleDelete(p.id, 'PRODUCT')} className="text-red-400 hover:text-red-600"><Trash2 size={18}/></button>

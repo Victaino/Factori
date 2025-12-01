@@ -1,9 +1,12 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
 import { Payroll, Employee, Deduction } from '../types';
 import { Banknote, Plus, Trash2, Search, X, Pencil, Calendar } from 'lucide-react';
+import { useSettings } from '../contexts/SettingsContext';
 
 export const PayrollManager: React.FC = () => {
+  const { formatCurrency } = useSettings();
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [deductions, setDeductions] = useState<Deduction[]>([]);
@@ -181,7 +184,7 @@ export const PayrollManager: React.FC = () => {
                 <td className="p-4 text-gray-800">{pay.date}</td>
                 <td className="p-4 text-gray-800 font-medium">{getEmployeeName(pay.employeeId)}</td>
                 <td className="p-4 text-gray-600">{getDeductionDesc(pay.deductionId)}</td>
-                <td className="p-4 text-green-600 font-bold">${pay.amountPayable.toLocaleString()}</td>
+                <td className="p-4 text-green-600 font-bold">{formatCurrency(pay.amountPayable)}</td>
                 <td className="p-4 text-right flex justify-end gap-2">
                   <button onClick={() => handleEdit(pay)} className="text-blue-400 hover:text-blue-600">
                     <Pencil size={18} />
@@ -221,7 +224,7 @@ export const PayrollManager: React.FC = () => {
                 <select required className="w-full border rounded-lg p-2"
                   value={formData.employeeId} onChange={e => handleEmployeeChange(e.target.value)}>
                   <option value="">Select Employee</option>
-                  {employees.map(e => <option key={e.id} value={e.id}>{e.name} (${e.salary})</option>)}
+                  {employees.map(e => <option key={e.id} value={e.id}>{e.name} ({formatCurrency(e.salary)})</option>)}
                 </select>
               </div>
               <div>
@@ -229,7 +232,7 @@ export const PayrollManager: React.FC = () => {
                 <select className="w-full border rounded-lg p-2"
                   value={formData.deductionId} onChange={e => handleDeductionChange(e.target.value)}>
                   <option value="">None</option>
-                  {deductions.map(d => <option key={d.id} value={d.id}>{d.description} (-${d.amount})</option>)}
+                  {deductions.map(d => <option key={d.id} value={d.id}>{d.description} (-{formatCurrency(d.amount)})</option>)}
                 </select>
               </div>
               <div>

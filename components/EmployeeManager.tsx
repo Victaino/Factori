@@ -1,9 +1,12 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
 import { Employee, Bank } from '../types';
 import { UserPlus, Trash2, Plus, Mail, Phone, Briefcase, Calendar, CreditCard, Pencil, Search, X } from 'lucide-react';
+import { useSettings } from '../contexts/SettingsContext';
 
 export const EmployeeManager: React.FC = () => {
+  const { formatCurrency } = useSettings();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [banks, setBanks] = useState<Bank[]>([]);
 
@@ -176,7 +179,7 @@ export const EmployeeManager: React.FC = () => {
               <div className="border-t pt-2 mt-3">
                  <div className="flex justify-between items-center mb-1">
                    <span className="text-gray-500">Salary:</span>
-                   <span className="font-semibold text-gray-800">${emp.salary.toLocaleString()}</span>
+                   <span className="font-semibold text-gray-800">{formatCurrency(emp.salary)}</span>
                  </div>
                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
                    <CreditCard size={14} />

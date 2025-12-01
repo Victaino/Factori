@@ -1,9 +1,12 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
 import { PurchaseOrder, Supplier } from '../types';
 import { ShoppingBag, Plus, Trash2, Calendar, Truck, Pencil, Search, X } from 'lucide-react';
+import { useSettings } from '../contexts/SettingsContext';
 
 export const PurchaseOrderManager: React.FC = () => {
+  const { formatCurrency } = useSettings();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -194,7 +197,7 @@ export const PurchaseOrderManager: React.FC = () => {
                   <td className="p-4 text-gray-600">{order.orderDate}</td>
                   <td className="p-4 text-gray-600">{order.expectedDeliveryDate}</td>
                   <td className="p-4 text-gray-600">{order.receivedDate || '-'}</td>
-                  <td className="p-4 text-gray-800 font-semibold">${order.totalAmount.toLocaleString()}</td>
+                  <td className="p-4 text-gray-800 font-semibold">{formatCurrency(order.totalAmount)}</td>
                   <td className="p-4">
                     <select 
                       value={order.status}
@@ -236,6 +239,17 @@ export const PurchaseOrderManager: React.FC = () => {
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">&times;</button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Purchase Order ID</label>
+                <input 
+                  type="text" 
+                  readOnly 
+                  className="w-full border rounded-lg p-2 bg-gray-100 text-gray-500 font-mono text-sm"
+                  value={editingId || 'Auto-generated'} 
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
                 <select required className="w-full border rounded-lg p-2"

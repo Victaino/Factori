@@ -1,9 +1,12 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
 import { Sale, Customer, Product, Bank } from '../types';
 import { FileText, Mail, Printer, Eye, X, Download, Search } from 'lucide-react';
+import { useSettings } from '../contexts/SettingsContext';
 
 export const InvoiceManager: React.FC = () => {
+  const { formatCurrency } = useSettings();
   const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -41,7 +44,7 @@ export const InvoiceManager: React.FC = () => {
     if (!customer || !product) return;
 
     const subject = `Invoice #${selectedSale.id} - Factori Production`;
-    const body = `Dear ${customer.contactPerson},%0D%0A%0D%0APlease find the invoice details below for your recent purchase.%0D%0A%0D%0AInvoice ID: ${selectedSale.id}%0D%0ADate: ${selectedSale.date}%0D%0AProduct: ${product.name}%0D%0AQuantity: ${selectedSale.quantity}%0D%0ATotal Amount: $${selectedSale.amount.toLocaleString()}%0D%0ABalance Due: $${selectedSale.balance.toLocaleString()}%0D%0A%0D%0AKind regards,%0D%0AFactori Accounts Team`;
+    const body = `Dear ${customer.contactPerson},%0D%0A%0D%0APlease find the invoice details below for your recent purchase.%0D%0A%0D%0AInvoice ID: ${selectedSale.id}%0D%0ADate: ${selectedSale.date}%0D%0AProduct: ${product.name}%0D%0AQuantity: ${selectedSale.quantity}%0D%0ATotal Amount: ${formatCurrency(selectedSale.amount)}%0D%0ABalance Due: ${formatCurrency(selectedSale.balance)}%0D%0A%0D%0AKind regards,%0D%0AFactori Accounts Team`;
 
     window.location.href = `mailto:${customer.email}?subject=${subject}&body=${body}`;
   };
@@ -127,7 +130,7 @@ export const InvoiceManager: React.FC = () => {
                   <td className="p-4 font-mono text-gray-600">#{sale.id}</td>
                   <td className="p-4 text-gray-800">{sale.date}</td>
                   <td className="p-4 text-gray-800 font-medium">{customer?.name || 'Unknown'}</td>
-                  <td className="p-4 text-gray-800">${sale.amount.toLocaleString()}</td>
+                  <td className="p-4 text-gray-800">{formatCurrency(sale.amount)}</td>
                   <td className="p-4">
                     <span className={`px-2 py-1 rounded text-xs font-semibold ${isPaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                       {isPaid ? 'PAID' : 'PENDING'}
@@ -212,7 +215,7 @@ export const InvoiceManager: React.FC = () => {
                    <div>
                     <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Amount Due</h3>
                     <p className={`font-bold text-xl ${selectedSale.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      ${selectedSale.balance.toLocaleString()}
+                      {formatCurrency(selectedSale.balance)}
                     </p>
                    </div>
                 </div>
@@ -233,8 +236,8 @@ export const InvoiceManager: React.FC = () => {
                     <tr>
                       <td className="p-3 font-medium text-gray-800">{getProduct(selectedSale.productId)?.name}</td>
                       <td className="p-3 text-right text-gray-600">{selectedSale.quantity}</td>
-                      <td className="p-3 text-right text-gray-600">${selectedSale.price.toLocaleString()}</td>
-                      <td className="p-3 text-right font-semibold text-gray-800">${selectedSale.amount.toLocaleString()}</td>
+                      <td className="p-3 text-right text-gray-600">{formatCurrency(selectedSale.price)}</td>
+                      <td className="p-3 text-right font-semibold text-gray-800">{formatCurrency(selectedSale.amount)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -245,23 +248,23 @@ export const InvoiceManager: React.FC = () => {
                 <div className="w-64 space-y-2">
                   <div className="flex justify-between text-gray-600">
                     <span>Subtotal</span>
-                    <span>${selectedSale.amount.toLocaleString()}</span>
+                    <span>{formatCurrency(selectedSale.amount)}</span>
                   </div>
                   <div className="flex justify-between text-gray-600">
                     <span>Tax (0%)</span>
-                    <span>$0.00</span>
+                    <span>{formatCurrency(0)}</span>
                   </div>
                   <div className="flex justify-between font-bold text-lg text-gray-800 border-t pt-2">
                     <span>Total</span>
-                    <span>${selectedSale.amount.toLocaleString()}</span>
+                    <span>{formatCurrency(selectedSale.amount)}</span>
                   </div>
                    <div className="flex justify-between text-green-600 text-sm pt-2">
                     <span>Amount Paid</span>
-                    <span>-${selectedSale.paid.toLocaleString()}</span>
+                    <span>-{formatCurrency(selectedSale.paid)}</span>
                   </div>
                    <div className="flex justify-between font-bold text-gray-800 border-t pt-2">
                     <span>Balance Due</span>
-                    <span>${selectedSale.balance.toLocaleString()}</span>
+                    <span>{formatCurrency(selectedSale.balance)}</span>
                   </div>
                 </div>
               </div>

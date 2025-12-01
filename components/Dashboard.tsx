@@ -6,20 +6,22 @@ import {
 import { db } from '../services/db';
 import { Factory, AlertTriangle, DollarSign, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { Production, IncidentReport, Material, Product, InventoryItem } from '../types';
+import { useSettings } from '../contexts/SettingsContext';
 
 const Card: React.FC<{ title: string; value: string | number; icon: React.ReactNode; color: string }> = ({ title, value, icon, color }) => (
-  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
+  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4 dark:bg-slate-800 dark:border-slate-700">
     <div className={`p-4 rounded-full ${color} text-white`}>
       {icon}
     </div>
     <div>
-      <p className="text-sm text-gray-500 font-medium">{title}</p>
-      <h3 className="text-2xl font-bold text-gray-800">{value}</h3>
+      <p className="text-sm text-gray-500 font-medium dark:text-gray-400">{title}</p>
+      <h3 className="text-2xl font-bold text-gray-800 dark:text-white">{value}</h3>
     </div>
   </div>
 );
 
 export const Dashboard: React.FC = () => {
+  const { formatCurrency } = useSettings();
   const [production, setProduction] = useState<Production[]>([]);
   const [incidents, setIncidents] = useState<IncidentReport[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -48,7 +50,7 @@ export const Dashboard: React.FC = () => {
 
   const totalOutput = useMemo(() => production.reduce((acc, curr) => acc + curr.outputTonnage, 0).toFixed(1), [production]);
   const incidentCount = incidents.length;
-  const materialValue = useMemo(() => materials.reduce((acc, curr) => acc + curr.amount, 0).toLocaleString(), [materials]);
+  const materialValue = useMemo(() => materials.reduce((acc, curr) => acc + curr.amount, 0), [materials]);
   
   // Low Stock Logic
   const lowStockItems = useMemo(() => {
@@ -87,7 +89,7 @@ export const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card title="Total Production" value={`${totalOutput} Tons`} icon={<Factory size={24} />} color="bg-blue-600" />
         <Card title="Active Incidents" value={incidentCount} icon={<AlertTriangle size={24} />} color="bg-red-500" />
-        <Card title="Material Value" value={`$${materialValue}`} icon={<DollarSign size={24} />} color="bg-green-600" />
+        <Card title="Material Value" value={formatCurrency(materialValue)} icon={<DollarSign size={24} />} color="bg-green-600" />
         
         {lowStockItems.length > 0 ? (
           <Card 
@@ -108,8 +110,8 @@ export const Dashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Line Chart: Production Trend */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">Production Output Trend</h3>
+        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col dark:bg-slate-800 dark:border-slate-700">
+          <h3 className="text-lg font-bold text-gray-800 mb-4 dark:text-white">Production Output Trend</h3>
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={lineChartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
@@ -128,8 +130,8 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Bar Chart: Product Value */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">Inventory Value</h3>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col dark:bg-slate-800 dark:border-slate-700">
+          <h3 className="text-lg font-bold text-gray-800 mb-4 dark:text-white">Inventory Value</h3>
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={barChartData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
@@ -139,8 +141,9 @@ export const Dashboard: React.FC = () => {
                 <Tooltip 
                    cursor={{ fill: '#f3f4f6' }}
                    contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                   formatter={(value: any) => formatCurrency(value)}
                 />
-                <Bar dataKey="value" name="Value ($)" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="value" name="Value" fill="#10b981" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -149,8 +152,8 @@ export const Dashboard: React.FC = () => {
       
       {/* Recent Incidents Quick View */}
       {incidents.length > 0 && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-           <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 dark:bg-slate-800 dark:border-slate-700">
+           <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 dark:text-white">
              <AlertTriangle className="text-red-500" size={20} /> Recent Incidents
            </h3>
            <div className="overflow-x-auto">
@@ -162,12 +165,12 @@ export const Dashboard: React.FC = () => {
                    <th className="p-3 rounded-r-lg">Resolution</th>
                  </tr>
                </thead>
-               <tbody className="divide-y">
+               <tbody className="divide-y dark:divide-slate-700">
                  {incidents.slice(0, 5).map(inc => (
                    <tr key={inc.id}>
-                     <td className="p-3 text-gray-600">{inc.date}</td>
-                     <td className="p-3 font-medium text-gray-800">{inc.description}</td>
-                     <td className="p-3 text-gray-600">{inc.remark}</td>
+                     <td className="p-3 text-gray-600 dark:text-gray-300">{inc.date}</td>
+                     <td className="p-3 font-medium text-gray-800 dark:text-white">{inc.description}</td>
+                     <td className="p-3 text-gray-600 dark:text-gray-300">{inc.remark}</td>
                    </tr>
                  ))}
                </tbody>

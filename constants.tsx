@@ -77,6 +77,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'CUSTOMERS', label: 'Customers', icon: <Users size={20} /> },
   { id: 'RESOURCES', label: 'Resources', icon: <Settings size={20} /> },
   { id: 'INCIDENTS', label: 'Incidents', icon: <AlertTriangle size={20} /> },
+  { id: 'SETTINGS', label: 'Settings', icon: <Settings size={20} /> },
 ];
 
 export const getPageTitle = (viewId: string): string => {

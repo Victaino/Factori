@@ -177,4 +177,5 @@ export type ViewState =
   | 'EMPLOYEES'
   | 'BANKS'
   | 'PAYROLL'
-  | 'DEDUCTIONS';
+  | 'DEDUCTIONS'
+  | 'SETTINGS';

@@ -1,9 +1,12 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
 import { Expense, Supplier } from '../types';
 import { Plus, Trash2, Wallet, Pencil, Search, X, Calendar } from 'lucide-react';
+import { useSettings } from '../contexts/SettingsContext';
 
 export const ExpenseManager: React.FC = () => {
+  const { formatCurrency } = useSettings();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -176,10 +179,10 @@ export const ExpenseManager: React.FC = () => {
                   <td className="p-4 text-gray-800 font-medium">{getSupplierName(item.supplierId)}</td>
                   <td className="p-4 text-gray-600">{item.items}</td>
                   <td className="p-4 text-gray-600">{item.quantity}</td>
-                  <td className="p-4 text-gray-800 font-semibold">${item.amount.toLocaleString()}</td>
-                  <td className="p-4 text-green-600">${item.paid.toLocaleString()}</td>
+                  <td className="p-4 text-gray-800 font-semibold">{formatCurrency(item.amount)}</td>
+                  <td className="p-4 text-green-600">{formatCurrency(item.paid)}</td>
                   <td className={`p-4 font-bold ${item.balance > 0 ? 'text-red-500' : 'text-gray-400'}`}>
-                    ${item.balance.toLocaleString()}
+                    {formatCurrency(item.balance)}
                   </td>
                   <td className="p-4 text-right flex justify-end gap-2">
                     <button onClick={() => handleEdit(item)} className="text-blue-400 hover:text-blue-600">
@@ -211,6 +214,17 @@ export const ExpenseManager: React.FC = () => {
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">&times;</button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Purchase ID</label>
+                <input 
+                  type="text" 
+                  readOnly 
+                  className="w-full border rounded-lg p-2 bg-gray-100 text-gray-500 font-mono text-sm"
+                  value={editingId || 'Auto-generated'} 
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
@@ -248,7 +262,7 @@ export const ExpenseManager: React.FC = () => {
 
               <div className="bg-gray-50 p-3 rounded-lg border flex justify-between items-center">
                 <span className="text-sm font-medium text-gray-600">Total Amount:</span>
-                <span className="text-lg font-bold text-gray-800">${amount.toLocaleString()}</span>
+                <span className="text-lg font-bold text-gray-800">{formatCurrency(amount)}</span>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -260,7 +274,7 @@ export const ExpenseManager: React.FC = () => {
                 <div>
                    <label className="block text-sm font-medium text-gray-700 mb-1">Balance Due</label>
                    <div className="w-full border rounded-lg p-2 bg-gray-100 text-gray-600">
-                     ${balance.toLocaleString()}
+                     {formatCurrency(balance)}
                    </div>
                 </div>
               </div>

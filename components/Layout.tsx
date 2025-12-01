@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { NAV_ITEMS, getPageTitle } from '../constants';
 import type { NavItem } from '../constants';
@@ -82,7 +81,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
         onClick={() => handleNavigate(item.id as ViewState)}
         className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-colors duration-200 mb-1 ${
           isActive 
-            ? 'bg-blue-600 text-white shadow-md shadow-blue-900/30' 
+            ? 'bg-primary-600 text-white shadow-md shadow-primary-900/30' 
             : 'text-slate-300 hover:bg-slate-800 hover:text-white'
         }`}
       >
@@ -93,11 +92,11 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
   };
 
   return (
-    <div className="min-h-screen flex bg-slate-50">
+    <div className="min-h-screen flex bg-slate-50 dark:bg-slate-900">
       {/* Desktop Sidebar */}
-      <aside className="w-64 bg-slate-900 text-slate-300 flex-shrink-0 hidden md:flex flex-col transition-all duration-300 h-screen sticky top-0">
+      <aside className="w-64 bg-slate-900 text-slate-300 flex-shrink-0 hidden md:flex flex-col transition-all duration-300 h-screen sticky top-0 border-r border-slate-800">
         <div className="p-6 border-b border-slate-800 flex items-center space-x-3 flex-shrink-0">
-          <div className="p-2 bg-blue-600 rounded-lg text-white">
+          <div className="p-2 bg-primary-600 rounded-lg text-white">
             <LayoutDashboard size={24} />
           </div>
           <span className="text-xl font-bold text-white tracking-tight">Factori</span>
@@ -116,7 +115,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
       {/* Mobile Header (Visible on small screens) */}
       <div className="md:hidden fixed top-0 w-full bg-slate-900 z-50 p-4 flex justify-between items-center text-white shadow-md">
          <div className="flex items-center space-x-2">
-           <div className="p-1.5 bg-blue-600 rounded">
+           <div className="p-1.5 bg-primary-600 rounded">
              <LayoutDashboard size={18} />
            </div>
            <span className="font-bold text-lg">Factori</span>
@@ -142,7 +141,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
           <aside className="fixed inset-y-0 left-0 w-64 bg-slate-900 text-slate-300 flex flex-col shadow-2xl z-50 animate-in slide-in-from-left duration-200">
              <div className="p-6 border-b border-slate-800 flex items-center justify-between flex-shrink-0">
                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-blue-600 rounded-lg text-white">
+                  <div className="p-2 bg-primary-600 rounded-lg text-white">
                     <LayoutDashboard size={24} />
                   </div>
                   <span className="text-xl font-bold text-white tracking-tight">Factori</span>
@@ -165,16 +164,16 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto h-screen md:p-8 p-4 pt-20 md:pt-8 scroll-smooth">
+      <main className="flex-1 overflow-y-auto h-screen md:p-8 p-4 pt-20 md:pt-8 scroll-smooth dark:bg-slate-900 dark:text-gray-100">
         <div className="max-w-7xl mx-auto">
           <header className="mb-8 flex justify-between items-end">
              <div>
-               <h1 className="text-3xl font-bold text-gray-800">
+               <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
                  {getPageTitle(currentView)}
                </h1>
-               <p className="text-gray-500 mt-1">Overview and management</p>
+               <p className="text-gray-500 mt-1 dark:text-gray-400">Overview and management</p>
              </div>
-             <div className="text-sm text-gray-500 hidden md:block">
+             <div className="text-sm text-gray-500 hidden md:block dark:text-gray-400">
                {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
              </div>
           </header>

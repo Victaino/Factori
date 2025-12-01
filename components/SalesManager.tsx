@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
 import { Sale, Customer, Product } from '../types';
 import { Plus, Trash2, TrendingUp, Search, X } from 'lucide-react';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface SaleRowProps {
   item: Sale;
@@ -9,9 +11,10 @@ interface SaleRowProps {
   productName: string;
   onDelete: (id: string) => void;
   onUpdate: (id: string, updates: Partial<Sale>) => void;
+  formatCurrency: (amount: number) => string;
 }
 
-const SaleRow: React.FC<SaleRowProps> = ({ item, customerName, productName, onDelete, onUpdate }) => {
+const SaleRow: React.FC<SaleRowProps> = ({ item, customerName, productName, onDelete, onUpdate, formatCurrency }) => {
   const [localPrice, setLocalPrice] = useState(item.price);
 
   useEffect(() => {
@@ -40,10 +43,10 @@ const SaleRow: React.FC<SaleRowProps> = ({ item, customerName, productName, onDe
             onBlur={handleBlur}
         />
       </td>
-      <td className="p-4 text-gray-800 font-semibold">${item.amount.toLocaleString()}</td>
-      <td className="p-4 text-green-600">${item.paid.toLocaleString()}</td>
+      <td className="p-4 text-gray-800 font-semibold">{formatCurrency(item.amount)}</td>
+      <td className="p-4 text-green-600">{formatCurrency(item.paid)}</td>
       <td className={`p-4 font-bold ${item.balance > 0 ? 'text-red-500' : 'text-gray-400'}`}>
-        ${item.balance.toLocaleString()}
+        {formatCurrency(item.balance)}
       </td>
       <td className="p-4 text-right">
         <button onClick={() => onDelete(item.id)} className="text-red-400 hover:text-red-600">
@@ -55,10 +58,12 @@ const SaleRow: React.FC<SaleRowProps> = ({ item, customerName, productName, onDe
 };
 
 export const SalesManager: React.FC = () => {
+  const { formatCurrency } = useSettings();
   const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // Filter State
   const [searchTerm, setSearchTerm] = useState('');
@@ -102,14 +107,35 @@ export const SalesManager: React.FC = () => {
     const amount = formData.quantity * formData.price;
     const balance = amount - formData.paid;
     
-    await db.addSale({
-      ...formData,
-      amount,
-      balance
-    });
+    if (editingId) {
+       await db.updateSale(editingId, { ...formData, amount, balance });
+    } else {
+       await db.addSale({
+        ...formData,
+        amount,
+        balance
+      });
+    }
     
     setIsModalOpen(false);
     refreshData();
+    resetForm();
+  };
+
+  const handleEdit = (sale: Sale) => {
+    setFormData({
+      customerId: sale.customerId,
+      productId: sale.productId,
+      quantity: sale.quantity,
+      price: sale.price,
+      paid: sale.paid,
+      date: sale.date
+    });
+    setEditingId(sale.id);
+    setIsModalOpen(true);
+  };
+
+  const resetForm = () => {
     setFormData({
       customerId: '',
       productId: '',
@@ -118,6 +144,7 @@ export const SalesManager: React.FC = () => {
       paid: 0,
       date: new Date().toISOString().split('T')[0]
     });
+    setEditingId(null);
   };
 
   const handleUpdateSale = async (id: string, updates: Partial<Sale>) => {
@@ -175,7 +202,7 @@ export const SalesManager: React.FC = () => {
           <TrendingUp className="text-green-600" /> Sales
         </h2>
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => { resetForm(); setIsModalOpen(true); }}
           className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700"
         >
           <Plus size={20} /> New Sale
@@ -265,6 +292,7 @@ export const SalesManager: React.FC = () => {
                   productName={getProductName(item.productId)}
                   onDelete={handleDelete}
                   onUpdate={handleUpdateSale}
+                  formatCurrency={formatCurrency}
                 />
               ))}
               {filteredSales.length === 0 && (
@@ -283,10 +311,21 @@ export const SalesManager: React.FC = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl w-full max-w-lg">
             <div className="p-6 border-b flex justify-between items-center">
-              <h3 className="text-xl font-bold">Record Sale</h3>
+              <h3 className="text-xl font-bold">{editingId ? 'Edit Sale' : 'Record Sale'}</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">&times;</button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Sale ID</label>
+                <input 
+                  type="text" 
+                  readOnly 
+                  className="w-full border rounded-lg p-2 bg-gray-100 text-gray-500 font-mono text-sm"
+                  value={editingId || 'Auto-generated'} 
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
@@ -327,7 +366,7 @@ export const SalesManager: React.FC = () => {
 
               <div className="bg-gray-50 p-3 rounded-lg border flex justify-between items-center">
                 <span className="text-sm font-medium text-gray-600">Total Amount:</span>
-                <span className="text-lg font-bold text-gray-800">${amount.toLocaleString()}</span>
+                <span className="text-lg font-bold text-gray-800">{formatCurrency(amount)}</span>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -339,13 +378,13 @@ export const SalesManager: React.FC = () => {
                 <div>
                    <label className="block text-sm font-medium text-gray-700 mb-1">Balance Due</label>
                    <div className="w-full border rounded-lg p-2 bg-gray-100 text-gray-600">
-                     ${balance.toLocaleString()}
+                     {formatCurrency(balance)}
                    </div>
                 </div>
               </div>
 
               <button type="submit" className="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 mt-2">
-                Save Sale
+                {editingId ? 'Update Sale' : 'Save Sale'}
               </button>
             </form>
           </div>

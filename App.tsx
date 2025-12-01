@@ -17,7 +17,9 @@ import { BankManager } from './components/BankManager';
 import { DeductionManager } from './components/DeductionManager';
 import { PayrollManager } from './components/PayrollManager';
 import { InvoiceManager } from './components/InvoiceManager';
+import { SettingsManager } from './components/SettingsManager';
 import { ViewState } from './types';
+import { SettingsProvider } from './contexts/SettingsContext';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
@@ -42,14 +44,17 @@ const App: React.FC = () => {
       case 'PAYROLL': return <PayrollManager />;
       case 'INCIDENTS': return <IncidentManager />;
       case 'RESOURCES': return <ResourceManager />;
+      case 'SETTINGS': return <SettingsManager />;
       default: return <Dashboard />;
     }
   };
 
   return (
-    <Layout currentView={currentView} onNavigate={setCurrentView}>
-      {renderContent()}
-    </Layout>
+    <SettingsProvider>
+      <Layout currentView={currentView} onNavigate={setCurrentView}>
+        {renderContent()}
+      </Layout>
+    </SettingsProvider>
   );
 };
 
