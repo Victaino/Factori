@@ -1,11 +1,17 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
 import { Employee, Bank } from '../types';
 import { UserPlus, Trash2, Plus, Mail, Phone, Briefcase, Calendar, CreditCard, Pencil, Search, X } from 'lucide-react';
 
 export const EmployeeManager: React.FC = () => {
-  const [employees, setEmployees] = useState<Employee[]>(db.getEmployees());
-  const [banks, setBanks] = useState<Bank[]>(db.getBanks());
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [banks, setBanks] = useState<Bank[]>([]);
+
+  useEffect(() => {
+    db.getEmployees().then(setEmployees);
+    db.getBanks().then(setBanks);
+  }, []);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -23,13 +29,13 @@ export const EmployeeManager: React.FC = () => {
     dateDisengaged: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
-        db.updateEmployee(editingId, formData);
+        await db.updateEmployee(editingId, formData);
         setEmployees(employees.map(e => e.id === editingId ? { ...e, ...formData } : e));
     } else {
-        const added = db.addEmployee(formData);
+        const added = await db.addEmployee(formData);
         setEmployees([...employees, added]);
     }
     
@@ -62,9 +68,9 @@ export const EmployeeManager: React.FC = () => {
       setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Delete this employee record?')) {
-      db.deleteEmployee(id);
+      await db.deleteEmployee(id);
       setEmployees(employees.filter(e => e.id !== id));
     }
   };

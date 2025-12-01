@@ -4,8 +4,8 @@ import { Expense, Supplier } from '../types';
 import { Plus, Trash2, Wallet, Pencil, Search, X, Calendar } from 'lucide-react';
 
 export const ExpenseManager: React.FC = () => {
-  const [expenses, setExpenses] = useState<Expense[]>(db.getExpenses());
-  const [suppliers, setSuppliers] = useState<Supplier[]>(db.getSuppliers());
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -22,24 +22,24 @@ export const ExpenseManager: React.FC = () => {
     date: new Date().toISOString().split('T')[0]
   });
 
-  const refreshData = () => {
-    setExpenses(db.getExpenses());
-    setSuppliers(db.getSuppliers());
+  const refreshData = async () => {
+    setExpenses(await db.getExpenses());
+    setSuppliers(await db.getSuppliers());
   };
 
   useEffect(() => {
     refreshData();
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = formData.quantity * formData.price;
     const balance = amount - formData.paid;
     
     if (editingId) {
-        db.updateExpense(editingId, { ...formData, amount, balance });
+        await db.updateExpense(editingId, { ...formData, amount, balance });
     } else {
-        db.addExpense({
+        await db.addExpense({
             ...formData,
             amount,
             balance
@@ -76,9 +76,9 @@ export const ExpenseManager: React.FC = () => {
       setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if(confirm('Delete this purchase record?')) {
-      db.deleteExpense(id);
+      await db.deleteExpense(id);
       refreshData();
     }
   };

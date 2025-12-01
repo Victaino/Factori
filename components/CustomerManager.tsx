@@ -1,10 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
 import { Customer } from '../types';
 import { Plus, Trash2, Users, User, Phone, Mail, MapPin, Pencil, Search, X } from 'lucide-react';
 
 export const CustomerManager: React.FC = () => {
-  const [customers, setCustomers] = useState<Customer[]>(db.getCustomers());
+  const [customers, setCustomers] = useState<Customer[]>([]);
+
+  useEffect(() => {
+    db.getCustomers().then(setCustomers);
+  }, []);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -17,13 +22,13 @@ export const CustomerManager: React.FC = () => {
     contactPerson: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
-      db.updateCustomer(editingId, formData);
+      await db.updateCustomer(editingId, formData);
       setCustomers(customers.map(c => c.id === editingId ? { ...c, ...formData } : c));
     } else {
-      const newCustomer = db.addCustomer(formData);
+      const newCustomer = await db.addCustomer(formData);
       setCustomers([...customers, newCustomer]);
     }
     
@@ -45,9 +50,9 @@ export const CustomerManager: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this customer?')) {
-      db.deleteCustomer(id);
+      await db.deleteCustomer(id);
       setCustomers(customers.filter(c => c.id !== id));
     }
   };

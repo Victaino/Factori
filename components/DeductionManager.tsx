@@ -1,10 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
 import { Deduction } from '../types';
 import { FileMinus, Trash2, Pencil, Search } from 'lucide-react';
 
 export const DeductionManager: React.FC = () => {
-  const [deductions, setDeductions] = useState<Deduction[]>(db.getDeductions());
+  const [deductions, setDeductions] = useState<Deduction[]>([]);
+
+  useEffect(() => {
+    db.getDeductions().then(setDeductions);
+  }, []);
+
   const [newDeduction, setNewDeduction] = useState({ description: '', amount: 0 });
 
   // Edit State
@@ -14,10 +19,10 @@ export const DeductionManager: React.FC = () => {
   // Search
   const [searchTerm, setSearchTerm] = useState('');
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDeduction.description || newDeduction.amount <= 0) return;
-    const added = db.addDeduction(newDeduction);
+    const added = await db.addDeduction(newDeduction);
     setDeductions([...deductions, added]);
     setNewDeduction({ description: '', amount: 0 });
   };
@@ -27,17 +32,17 @@ export const DeductionManager: React.FC = () => {
     setEditForm({ description: ded.description, amount: ded.amount });
   };
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
       if (editingId && editForm.description && editForm.amount > 0) {
-          db.updateDeduction(editingId, editForm);
+          await db.updateDeduction(editingId, editForm);
           setDeductions(deductions.map(d => d.id === editingId ? { ...d, ...editForm } : d));
           setEditingId(null);
       }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Delete this deduction type?')) {
-      db.deleteDeduction(id);
+      await db.deleteDeduction(id);
       setDeductions(deductions.filter(d => d.id !== id));
     }
   };

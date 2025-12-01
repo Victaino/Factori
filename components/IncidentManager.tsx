@@ -1,12 +1,20 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
 import { IncidentReport, Production } from '../types';
 import { AlertTriangle, Plus, Trash2, Pencil, Search, Calendar, X } from 'lucide-react';
 
 export const IncidentManager: React.FC = () => {
-  const [incidents, setIncidents] = useState<IncidentReport[]>(db.getIncidents());
-  const [productions] = useState<Production[]>(db.getProduction());
+  const [incidents, setIncidents] = useState<IncidentReport[]>([]);
+  const [productions, setProductions] = useState<Production[]>([]);
+  
+  useEffect(() => {
+    const fetchData = async () => {
+        setIncidents(await db.getIncidents());
+        setProductions(await db.getProduction());
+    };
+    fetchData();
+  }, []);
+
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
@@ -21,13 +29,13 @@ export const IncidentManager: React.FC = () => {
     date: new Date().toISOString().split('T')[0]
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
-        db.updateIncident(editingId, form);
+        await db.updateIncident(editingId, form);
         setIncidents(incidents.map(i => i.id === editingId ? { ...i, ...form } : i));
     } else {
-        const added = db.addIncident(form);
+        const added = await db.addIncident(form);
         setIncidents([added, ...incidents]);
     }
     
@@ -51,9 +59,9 @@ export const IncidentManager: React.FC = () => {
       setShowForm(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Delete this incident report?')) {
-        db.deleteIncident(id);
+        await db.deleteIncident(id);
         setIncidents(incidents.filter(i => i.id !== id));
     }
   };

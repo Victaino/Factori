@@ -27,12 +27,19 @@ export const ProductionManager: React.FC = () => {
     notes: ''
   });
 
-  const refreshData = () => {
-    setData(db.getProduction());
-    setPlants(db.getPlants());
-    setOperators(db.getOperators());
-    setMaterials(db.getMaterials());
-    setProducts(db.getProducts());
+  const refreshData = async () => {
+    const [p, pl, op, mat, prod] = await Promise.all([
+      db.getProduction(),
+      db.getPlants(),
+      db.getOperators(),
+      db.getMaterials(),
+      db.getProducts()
+    ]);
+    setData(p);
+    setPlants(pl);
+    setOperators(op);
+    setMaterials(mat);
+    setProducts(prod);
   };
 
   useEffect(() => {
@@ -50,12 +57,12 @@ export const ProductionManager: React.FC = () => {
     return parseFloat(diff.toFixed(2));
   }, [formData.timeStart, formData.timeStop]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
-        db.updateProduction(editingId, { ...formData, duration: currentDuration });
+        await db.updateProduction(editingId, { ...formData, duration: currentDuration });
     } else {
-        db.addProduction({ ...formData, duration: currentDuration });
+        await db.addProduction({ ...formData, duration: currentDuration });
     }
     setIsModalOpen(false);
     refreshData();
@@ -95,9 +102,9 @@ export const ProductionManager: React.FC = () => {
       setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if(confirm('Delete this production record?')) {
-      db.deleteProduction(id);
+      await db.deleteProduction(id);
       refreshData();
     }
   };

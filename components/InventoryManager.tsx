@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
 import { Material, Product, InventoryItem } from '../types';
-import { Plus, Trash2, Box, Package, ShoppingCart, Save, AlertTriangle, Pencil, Check, X, ArrowRightLeft, Image as ImageIcon } from 'lucide-react';
+import { Plus, Trash2, Box, Package, ShoppingCart, Save, AlertTriangle, Pencil, Check, X, ArrowRightLeft, Image as ImageIcon, Search } from 'lucide-react';
 
 type Tab = 'MATERIALS' | 'PRODUCTS' | 'INVENTORY';
 
@@ -104,10 +103,15 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
   // Form Data
   const [formData, setFormData] = useState({ name: '', price: 0, quantity: 0, imageUrl: '' });
 
-  const refreshData = () => {
-    setMaterials(db.getMaterials());
-    setProducts(db.getProducts());
-    setInventory(db.getInventory());
+  const refreshData = async () => {
+    const [mat, prod, inv] = await Promise.all([
+      db.getMaterials(),
+      db.getProducts(),
+      db.getInventory()
+    ]);
+    setMaterials(mat);
+    setProducts(prod);
+    setInventory(inv);
   };
 
   useEffect(() => {
@@ -133,17 +137,17 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
   const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   // CRUD Handlers
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (modalType === 'MATERIAL') {
       if (editingItem) {
-        db.updateMaterial(editingItem.id, {
+        await db.updateMaterial(editingItem.id, {
           name: formData.name,
           price: formData.price,
           quantity: formData.quantity
         });
       } else {
-        db.addMaterial({
+        await db.addMaterial({
           name: formData.name,
           price: formData.price,
           quantity: formData.quantity
@@ -151,14 +155,14 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
       }
     } else if (modalType === 'PRODUCT') {
       if (editingItem) {
-        db.updateProduct(editingItem.id, {
+        await db.updateProduct(editingItem.id, {
           name: formData.name,
           price: formData.price,
           quantity: formData.quantity,
           imageUrl: formData.imageUrl
         });
       } else {
-        db.addProduct({
+        await db.addProduct({
            name: formData.name,
            price: formData.price,
            quantity: formData.quantity,
@@ -192,20 +196,20 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
     setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string, type: 'MATERIAL' | 'PRODUCT') => {
+  const handleDelete = async (id: string, type: 'MATERIAL' | 'PRODUCT') => {
     if (!confirm('Are you sure?')) return;
-    if (type === 'MATERIAL') db.deleteMaterial(id);
-    if (type === 'PRODUCT') db.deleteProduct(id);
+    if (type === 'MATERIAL') await db.deleteMaterial(id);
+    if (type === 'PRODUCT') await db.deleteProduct(id);
     refreshData();
   };
 
-  const handleUpdateInventory = (id: string, newQty: number) => {
-    db.updateInventory(id, { quantity: newQty });
+  const handleUpdateInventory = async (id: string, newQty: number) => {
+    await db.updateInventory(id, { quantity: newQty });
     refreshData();
   };
 
-  const handleUpdateThreshold = (id: string, newThreshold: number) => {
-    db.updateInventory(id, { lowStockThreshold: newThreshold });
+  const handleUpdateThreshold = async (id: string, newThreshold: number) => {
+    await db.updateInventory(id, { lowStockThreshold: newThreshold });
     refreshData();
   };
 
@@ -256,8 +260,7 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
               onChange={(e) => setSearchTerm(e.target.value)}
             />
              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-               {/* Search Icon Placeholder if needed, or just use CSS */}
-               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+               <Search size={14} />
              </div>
         </div>
       </div>

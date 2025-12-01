@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
 import { Sale, Customer, Product } from '../types';
@@ -56,9 +55,9 @@ const SaleRow: React.FC<SaleRowProps> = ({ item, customerName, productName, onDe
 };
 
 export const SalesManager: React.FC = () => {
-  const [sales, setSales] = useState<Sale[]>(db.getSales());
-  const [customers, setCustomers] = useState<Customer[]>(db.getCustomers());
-  const [products, setProducts] = useState<Product[]>(db.getProducts());
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Filter State
@@ -77,10 +76,10 @@ export const SalesManager: React.FC = () => {
     date: new Date().toISOString().split('T')[0]
   });
 
-  const refreshData = () => {
-    setSales(db.getSales());
-    setCustomers(db.getCustomers());
-    setProducts(db.getProducts());
+  const refreshData = async () => {
+    setSales(await db.getSales());
+    setCustomers(await db.getCustomers());
+    setProducts(await db.getProducts());
   };
 
   useEffect(() => {
@@ -98,12 +97,12 @@ export const SalesManager: React.FC = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = formData.quantity * formData.price;
     const balance = amount - formData.paid;
     
-    db.addSale({
+    await db.addSale({
       ...formData,
       amount,
       balance
@@ -121,14 +120,14 @@ export const SalesManager: React.FC = () => {
     });
   };
 
-  const handleUpdateSale = (id: string, updates: Partial<Sale>) => {
-    db.updateSale(id, updates);
+  const handleUpdateSale = async (id: string, updates: Partial<Sale>) => {
+    await db.updateSale(id, updates);
     refreshData();
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if(confirm('Delete this sale record?')) {
-      db.deleteSale(id);
+      await db.deleteSale(id);
       refreshData();
     }
   };

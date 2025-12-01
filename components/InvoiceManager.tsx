@@ -4,10 +4,10 @@ import { Sale, Customer, Product, Bank } from '../types';
 import { FileText, Mail, Printer, Eye, X, Download, Search } from 'lucide-react';
 
 export const InvoiceManager: React.FC = () => {
-  const [sales, setSales] = useState<Sale[]>(db.getSales());
-  const [customers, setCustomers] = useState<Customer[]>(db.getCustomers());
-  const [products, setProducts] = useState<Product[]>(db.getProducts());
-  const [banks, setBanks] = useState<Bank[]>(db.getBanks());
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [banks, setBanks] = useState<Bank[]>([]);
   
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -17,10 +17,13 @@ export const InvoiceManager: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('ALL');
 
   useEffect(() => {
-    setSales(db.getSales());
-    setCustomers(db.getCustomers());
-    setProducts(db.getProducts());
-    setBanks(db.getBanks());
+    const fetchData = async () => {
+        setSales(await db.getSales());
+        setCustomers(await db.getCustomers());
+        setProducts(await db.getProducts());
+        setBanks(await db.getBanks());
+    };
+    fetchData();
   }, []);
 
   const getCustomer = (id: string) => customers.find(c => c.id === id);

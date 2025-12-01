@@ -1,11 +1,20 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
 import { Plant, Operator } from '../types';
 import { Trash2, Plus, Users, Factory, Pencil, Check, X, Search } from 'lucide-react';
 
 export const ResourceManager: React.FC = () => {
-  const [plants, setPlants] = useState<Plant[]>(db.getPlants());
-  const [operators, setOperators] = useState<Operator[]>(db.getOperators());
+  const [plants, setPlants] = useState<Plant[]>([]);
+  const [operators, setOperators] = useState<Operator[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setPlants(await db.getPlants());
+      setOperators(await db.getOperators());
+    };
+    fetchData();
+  }, []);
+
   const [newPlant, setNewPlant] = useState('');
   const [newOperator, setNewOperator] = useState('');
   
@@ -18,17 +27,17 @@ export const ResourceManager: React.FC = () => {
   // Search State
   const [searchTerm, setSearchTerm] = useState('');
 
-  const handleAddPlant = (e: React.FormEvent) => {
+  const handleAddPlant = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPlant) return;
-    const added = db.addPlant(newPlant);
+    const added = await db.addPlant(newPlant);
     setPlants([...plants, added]);
     setNewPlant('');
   };
 
-  const handleUpdatePlant = (id: string) => {
+  const handleUpdatePlant = async (id: string) => {
     if (!editPlantName.trim()) return;
-    db.updatePlant(id, editPlantName);
+    await db.updatePlant(id, editPlantName);
     setPlants(plants.map(p => p.id === id ? { ...p, name: editPlantName } : p));
     setEditingPlantId(null);
   };
@@ -38,24 +47,24 @@ export const ResourceManager: React.FC = () => {
     setEditPlantName(plant.name);
   };
 
-  const handleDeletePlant = (id: string) => {
+  const handleDeletePlant = async (id: string) => {
     if (confirm('Are you sure? This might affect production records.')) {
-        db.deletePlant(id);
+        await db.deletePlant(id);
         setPlants(plants.filter(p => p.id !== id));
     }
   };
 
-  const handleAddOperator = (e: React.FormEvent) => {
+  const handleAddOperator = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newOperator) return;
-    const added = db.addOperator(newOperator);
+    const added = await db.addOperator(newOperator);
     setOperators([...operators, added]);
     setNewOperator('');
   };
 
-  const handleUpdateOperator = (id: string) => {
+  const handleUpdateOperator = async (id: string) => {
      if (!editOperatorName.trim()) return;
-    db.updateOperator(id, editOperatorName);
+    await db.updateOperator(id, editOperatorName);
     setOperators(operators.map(o => o.id === id ? { ...o, name: editOperatorName } : o));
     setEditingOperatorId(null);
   };
@@ -65,9 +74,9 @@ export const ResourceManager: React.FC = () => {
     setEditOperatorName(op.name);
   };
 
-  const handleDeleteOperator = (id: string) => {
+  const handleDeleteOperator = async (id: string) => {
     if (confirm('Are you sure? This might affect production records.')) {
-        db.deleteOperator(id);
+        await db.deleteOperator(id);
         setOperators(operators.filter(o => o.id !== id));
     }
   };

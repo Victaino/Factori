@@ -1,10 +1,11 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend
 } from 'recharts';
 import { db } from '../services/db';
-import { Factory, AlertTriangle, DollarSign, AlertCircle, CheckCircle } from 'lucide-react';
+import { Factory, AlertTriangle, DollarSign, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { Production, IncidentReport, Material, Product, InventoryItem } from '../types';
 
 const Card: React.FC<{ title: string; value: string | number; icon: React.ReactNode; color: string }> = ({ title, value, icon, color }) => (
   <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
@@ -19,11 +20,31 @@ const Card: React.FC<{ title: string; value: string | number; icon: React.ReactN
 );
 
 export const Dashboard: React.FC = () => {
-  const production = db.getProduction();
-  const incidents = db.getIncidents();
-  const materials = db.getMaterials();
-  const products = db.getProducts();
-  const inventory = db.getInventory();
+  const [production, setProduction] = useState<Production[]>([]);
+  const [incidents, setIncidents] = useState<IncidentReport[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const [p, i, m, prod, inv] = await Promise.all([
+        db.getProduction(),
+        db.getIncidents(),
+        db.getMaterials(),
+        db.getProducts(),
+        db.getInventory()
+      ]);
+      setProduction(p);
+      setIncidents(i);
+      setMaterials(m);
+      setProducts(prod);
+      setInventory(inv);
+      setLoading(false);
+    };
+    fetchData();
+  }, []);
 
   const totalOutput = useMemo(() => production.reduce((acc, curr) => acc + curr.outputTonnage, 0).toFixed(1), [production]);
   const incidentCount = incidents.length;
@@ -51,6 +72,14 @@ export const Dashboard: React.FC = () => {
       value: p.amount
     }));
   }, [products]);
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="animate-spin text-blue-600" size={32} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

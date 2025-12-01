@@ -1,12 +1,13 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
 import { SalesOrder, Customer, Product } from '../types';
 import { ShoppingCart, Plus, Trash2, Calendar, Users, Package, Pencil, Search, X } from 'lucide-react';
 
 export const SalesOrderManager: React.FC = () => {
-  const [orders, setOrders] = useState<SalesOrder[]>(db.getSalesOrders());
-  const [customers, setCustomers] = useState<Customer[]>(db.getCustomers());
-  const [products, setProducts] = useState<Product[]>(db.getProducts());
+  const [orders, setOrders] = useState<SalesOrder[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -28,9 +29,12 @@ export const SalesOrderManager: React.FC = () => {
   });
 
   useEffect(() => {
-    setOrders(db.getSalesOrders());
-    setCustomers(db.getCustomers());
-    setProducts(db.getProducts());
+    const fetchData = async () => {
+        setOrders(await db.getSalesOrders());
+        setCustomers(await db.getCustomers());
+        setProducts(await db.getProducts());
+    };
+    fetchData();
   }, []);
 
   const resetForm = () => {
@@ -74,13 +78,13 @@ export const SalesOrderManager: React.FC = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
-        db.updateSalesOrder(editingId, formData);
+        await db.updateSalesOrder(editingId, formData);
         setOrders(orders.map(o => o.id === editingId ? { ...o, ...formData } : o));
     } else {
-        const newOrder = db.addSalesOrder(formData);
+        const newOrder = await db.addSalesOrder(formData);
         setOrders([newOrder, ...orders]);
     }
     setIsModalOpen(false);
@@ -103,28 +107,28 @@ export const SalesOrderManager: React.FC = () => {
       setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this sales order?')) {
-      db.deleteSalesOrder(id);
+      await db.deleteSalesOrder(id);
       setOrders(orders.filter(o => o.id !== id));
     }
   };
 
-  const handleStatusChange = (id: string, newStatus: string) => {
+  const handleStatusChange = async (id: string, newStatus: string) => {
     const status = newStatus as 'Pending' | 'Received' | 'Confirmed' | 'Shipped' | 'Cancelled';
     
     if (status === 'Confirmed') {
         if(confirm("Confirming this order will generate a record in the Sales Log. Continue?")) {
-            db.confirmSalesOrder(id);
-            setOrders(db.getSalesOrders()); // Refresh full list
+            await db.confirmSalesOrder(id);
+            setOrders(await db.getSalesOrders()); // Refresh full list
         }
     } else if (status === 'Received') {
         // Auto-set received date to today if setting to Received
         const today = new Date().toISOString().split('T')[0];
-        db.updateSalesOrder(id, { status, receivedDate: today });
+        await db.updateSalesOrder(id, { status, receivedDate: today });
         setOrders(orders.map(o => o.id === id ? { ...o, status, receivedDate: today } : o));
     } else {
-        db.updateSalesOrder(id, { status });
+        await db.updateSalesOrder(id, { status });
         setOrders(orders.map(o => o.id === id ? { ...o, status } : o));
     }
   };
@@ -231,9 +235,9 @@ export const SalesOrderManager: React.FC = () => {
                 <th className="p-4 font-semibold text-gray-600">ID</th>
                 <th className="p-4 font-semibold text-gray-600">Customer</th>
                 <th className="p-4 font-semibold text-gray-600">Product</th>
-                <th className="p-4 font-semibold text-gray-600">Details</th>
+                <th className="p-4 font-semibold text-gray-600">Order Date</th>
                 <th className="p-4 font-semibold text-gray-600">Delivery</th>
-                <th className="p-4 font-semibold text-gray-600">Received</th>
+                <th className="p-4 font-semibold text-gray-600">Received Date</th>
                 <th className="p-4 font-semibold text-gray-600">Amount</th>
                 <th className="p-4 font-semibold text-gray-600">Status</th>
                 <th className="p-4 font-semibold text-gray-600 text-right">Actions</th>
@@ -244,10 +248,13 @@ export const SalesOrderManager: React.FC = () => {
                 <tr key={order.id} className="hover:bg-gray-50">
                   <td className="p-4 text-gray-500 font-mono">#{order.id.slice(0, 6)}</td>
                   <td className="p-4 text-gray-800 font-medium">{getCustomerName(order.customerId)}</td>
-                  <td className="p-4 text-gray-600">{getProductName(order.productId)}</td>
-                  <td className="p-4 text-gray-600 text-xs">
-                    {order.quantity} x ${order.unitPrice.toLocaleString()}
+                   <td className="p-4 text-gray-600">
+                    <div className="flex flex-col">
+                        <span>{getProductName(order.productId)}</span>
+                        <span className="text-xs text-gray-400">Qty: {order.quantity}</span>
+                    </div>
                   </td>
+                  <td className="p-4 text-gray-600">{order.orderDate}</td>
                   <td className="p-4 text-gray-600">{order.deliveryDate}</td>
                   <td className="p-4 text-gray-600">{order.receivedDate || '-'}</td>
                   <td className="p-4 text-gray-800 font-semibold">${order.totalAmount.toLocaleString()}</td>
@@ -255,7 +262,6 @@ export const SalesOrderManager: React.FC = () => {
                     <select 
                       value={order.status}
                       onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                      disabled={order.status === 'Confirmed' || order.status === 'Shipped'} 
                       className={`px-2 py-1 rounded text-xs font-semibold border-none outline-none cursor-pointer ${getStatusColor(order.status)}`}
                     >
                       <option value="Pending">Pending</option>
@@ -278,7 +284,7 @@ export const SalesOrderManager: React.FC = () => {
               {filteredOrders.length === 0 && (
                 <tr>
                   <td colSpan={9} className="p-8 text-center text-gray-500">
-                     {orders.length === 0 ? "No sales orders found." : "No orders match your filters."}
+                    {orders.length === 0 ? "No sales orders found." : "No orders match your filters."}
                   </td>
                 </tr>
               )}
@@ -303,7 +309,7 @@ export const SalesOrderManager: React.FC = () => {
                   {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
-
+              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
                 <select required className="w-full border rounded-lg p-2"
@@ -316,7 +322,7 @@ export const SalesOrderManager: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                  <input required type="number" min="1" className="w-full border rounded-lg p-2" 
+                  <input required type="number" min="0" className="w-full border rounded-lg p-2" 
                     value={formData.quantity} onChange={e => handleQtyChange(parseFloat(e.target.value))} />
                 </div>
                 <div>
@@ -324,6 +330,12 @@ export const SalesOrderManager: React.FC = () => {
                   <input required type="number" min="0" className="w-full border rounded-lg p-2" 
                     value={formData.unitPrice} onChange={e => handlePriceChange(parseFloat(e.target.value))} />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Total Amount</label>
+                <input required type="number" min="0" className="w-full border rounded-lg p-2 bg-gray-50" readOnly
+                  value={formData.totalAmount} />
               </div>
               
               <div className="grid grid-cols-2 gap-4">
@@ -339,20 +351,26 @@ export const SalesOrderManager: React.FC = () => {
                 </div>
               </div>
 
+              {formData.status === 'Received' && (
+                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Received Date</label>
+                  <input type="date" className="w-full border rounded-lg p-2" 
+                    value={formData.receivedDate} onChange={e => setFormData({...formData, receivedDate: e.target.value})} />
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                  <select 
                     value={formData.status}
                     onChange={(e) => {
-                      const newStatus = e.target.value as any;
-                      setFormData(prev => ({
-                        ...prev, 
-                        status: newStatus,
-                        // Auto-fill received date if setting to Received and date is empty
-                        receivedDate: newStatus === 'Received' && !prev.receivedDate 
-                          ? new Date().toISOString().split('T')[0] 
-                          : prev.receivedDate
-                      }));
+                         const newStatus = e.target.value as any;
+                         // Auto-set received date if becoming Received
+                         let newReceived = formData.receivedDate;
+                         if (newStatus === 'Received' && !newReceived) {
+                             newReceived = new Date().toISOString().split('T')[0];
+                         }
+                         setFormData({...formData, status: newStatus, receivedDate: newReceived});
                     }}
                     className="w-full border rounded-lg p-2"
                   >
@@ -362,19 +380,6 @@ export const SalesOrderManager: React.FC = () => {
                     <option value="Shipped">Shipped</option>
                     <option value="Cancelled">Cancelled</option>
                   </select>
-              </div>
-
-              {formData.status === 'Received' && (
-                <div className="animate-fade-in">
-                   <label className="block text-sm font-medium text-gray-700 mb-1">Received Date</label>
-                   <input required type="date" className="w-full border rounded-lg p-2 border-cyan-500 ring-1 ring-cyan-100" 
-                    value={formData.receivedDate} onChange={e => setFormData({...formData, receivedDate: e.target.value})} />
-                </div>
-              )}
-
-              <div className="bg-gray-50 p-4 rounded-lg flex justify-between items-center">
-                <span className="text-gray-600 font-medium">Total Amount</span>
-                <span className="text-xl font-bold text-blue-600">${formData.totalAmount.toLocaleString()}</span>
               </div>
 
               <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 mt-2">

@@ -1,10 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
 import { Supplier } from '../types';
 import { Plus, Trash2, Truck, Phone, Mail, MapPin, Pencil, Search, X } from 'lucide-react';
 
 export const SupplierManager: React.FC = () => {
-  const [suppliers, setSuppliers] = useState<Supplier[]>(db.getSuppliers());
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+
+  useEffect(() => {
+    db.getSuppliers().then(setSuppliers);
+  }, []);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -17,13 +22,13 @@ export const SupplierManager: React.FC = () => {
     contactPerson: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
-        db.updateSupplier(editingId, formData);
+        await db.updateSupplier(editingId, formData);
         setSuppliers(suppliers.map(s => s.id === editingId ? { ...s, ...formData } : s));
     } else {
-        const newSupplier = db.addSupplier(formData);
+        const newSupplier = await db.addSupplier(formData);
         setSuppliers([...suppliers, newSupplier]);
     }
     setFormData({ name: '', address: '', phone: '', email: '', contactPerson: '' });
@@ -43,9 +48,9 @@ export const SupplierManager: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this supplier?')) {
-      db.deleteSupplier(id);
+      await db.deleteSupplier(id);
       setSuppliers(suppliers.filter(s => s.id !== id));
     }
   };

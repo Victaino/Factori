@@ -1,12 +1,11 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
 import { PurchaseOrder, Supplier } from '../types';
 import { ShoppingBag, Plus, Trash2, Calendar, Truck, Pencil, Search, X } from 'lucide-react';
 
 export const PurchaseOrderManager: React.FC = () => {
-  const [orders, setOrders] = useState<PurchaseOrder[]>(db.getPurchaseOrders());
-  const [suppliers, setSuppliers] = useState<Supplier[]>(db.getSuppliers());
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -25,8 +24,11 @@ export const PurchaseOrderManager: React.FC = () => {
   });
 
   useEffect(() => {
-    setOrders(db.getPurchaseOrders());
-    setSuppliers(db.getSuppliers());
+    const fetchData = async () => {
+        setOrders(await db.getPurchaseOrders());
+        setSuppliers(await db.getSuppliers());
+    };
+    fetchData();
   }, []);
 
   const resetForm = () => {
@@ -41,13 +43,13 @@ export const PurchaseOrderManager: React.FC = () => {
     setEditingId(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
-        db.updatePurchaseOrder(editingId, formData);
+        await db.updatePurchaseOrder(editingId, formData);
         setOrders(orders.map(o => o.id === editingId ? { ...o, ...formData } : o));
     } else {
-        const newOrder = db.addPurchaseOrder(formData);
+        const newOrder = await db.addPurchaseOrder(formData);
         setOrders([newOrder, ...orders]);
     }
     setIsModalOpen(false);
@@ -67,16 +69,16 @@ export const PurchaseOrderManager: React.FC = () => {
       setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this order?')) {
-      db.deletePurchaseOrder(id);
+      await db.deletePurchaseOrder(id);
       setOrders(orders.filter(o => o.id !== id));
     }
   };
 
-  const handleStatusChange = (id: string, newStatus: string) => {
+  const handleStatusChange = async (id: string, newStatus: string) => {
     const status = newStatus as 'Pending' | 'Received' | 'Cancelled';
-    db.updatePurchaseOrder(id, { status });
+    await db.updatePurchaseOrder(id, { status });
     setOrders(orders.map(o => o.id === id ? { ...o, status } : o));
   };
 

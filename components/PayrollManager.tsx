@@ -1,12 +1,22 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
 import { Payroll, Employee, Deduction } from '../types';
 import { Banknote, Plus, Trash2, Search, X, Pencil, Calendar } from 'lucide-react';
 
 export const PayrollManager: React.FC = () => {
-  const [payrolls, setPayrolls] = useState<Payroll[]>(db.getPayroll());
-  const [employees, setEmployees] = useState<Employee[]>(db.getEmployees());
-  const [deductions, setDeductions] = useState<Deduction[]>(db.getDeductions());
+  const [payrolls, setPayrolls] = useState<Payroll[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [deductions, setDeductions] = useState<Deduction[]>([]);
+  
+  useEffect(() => {
+    const fetchData = async () => {
+        setPayrolls(await db.getPayroll());
+        setEmployees(await db.getEmployees());
+        setDeductions(await db.getDeductions());
+    };
+    fetchData();
+  }, []);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -50,13 +60,13 @@ export const PayrollManager: React.FC = () => {
     setFormData(prev => ({ ...prev, deductionId: dedId, amountPayable: payable }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
-        db.updatePayroll(editingId, formData);
+        await db.updatePayroll(editingId, formData);
         setPayrolls(payrolls.map(p => p.id === editingId ? { ...p, ...formData } : p));
     } else {
-        const added = db.addPayroll(formData);
+        const added = await db.addPayroll(formData);
         setPayrolls([added, ...payrolls]); // Newest first
     }
     
@@ -83,9 +93,9 @@ export const PayrollManager: React.FC = () => {
       setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Delete this payroll record?')) {
-      db.deletePayroll(id);
+      await db.deletePayroll(id);
       setPayrolls(payrolls.filter(p => p.id !== id));
     }
   };

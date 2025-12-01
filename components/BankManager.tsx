@@ -1,10 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
 import { Bank } from '../types';
 import { Landmark, Plus, Trash2, Pencil, Check, X, Search } from 'lucide-react';
 
 export const BankManager: React.FC = () => {
-  const [banks, setBanks] = useState<Bank[]>(db.getBanks());
+  const [banks, setBanks] = useState<Bank[]>([]);
+
+  useEffect(() => {
+    db.getBanks().then(setBanks);
+  }, []);
+
   const [newBank, setNewBank] = useState({ name: '', sortCode: '' });
   
   // Edit State
@@ -14,10 +19,10 @@ export const BankManager: React.FC = () => {
   // Search
   const [searchTerm, setSearchTerm] = useState('');
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBank.name || !newBank.sortCode) return;
-    const added = db.addBank(newBank);
+    const added = await db.addBank(newBank);
     setBanks([...banks, added]);
     setNewBank({ name: '', sortCode: '' });
   };
@@ -27,17 +32,17 @@ export const BankManager: React.FC = () => {
     setEditForm({ name: bank.name, sortCode: bank.sortCode });
   };
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
       if (editingId && editForm.name && editForm.sortCode) {
-          db.updateBank(editingId, editForm);
+          await db.updateBank(editingId, editForm);
           setBanks(banks.map(b => b.id === editingId ? { ...b, ...editForm } : b));
           setEditingId(null);
       }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Delete this bank?')) {
-      db.deleteBank(id);
+      await db.deleteBank(id);
       setBanks(banks.filter(b => b.id !== id));
     }
   };
