@@ -75,13 +75,22 @@ export interface Supplier {
   contactPerson: string;
 }
 
+export interface Tax {
+  id: string;
+  name: string; // e.g. VAT, GST
+  rate: number; // Percentage e.g. 7.5
+  description?: string;
+}
+
 export interface PurchaseOrder {
   id: string;
   supplierId: string; // FK
   orderDate: string;
   expectedDeliveryDate: string;
   receivedDate?: string; // Optional field
-  totalAmount: number;
+  taxRate?: number;
+  taxAmount?: number;
+  totalAmount: number; // Final amount including tax
   status: 'Pending' | 'Received' | 'Cancelled';
 }
 
@@ -94,7 +103,9 @@ export interface SalesOrder {
   orderDate: string;
   deliveryDate: string;
   receivedDate?: string; // Optional field
-  totalAmount: number;
+  taxRate?: number;
+  taxAmount?: number;
+  totalAmount: number; // Final amount including tax
   status: 'Pending' | 'Received' | 'Confirmed' | 'Shipped' | 'Cancelled';
 }
 
@@ -104,7 +115,9 @@ export interface Expense {
   items: string;
   quantity: number;
   price: number;
-  amount: number;
+  taxRate?: number;
+  taxAmount?: number;
+  amount: number; // Total amount including tax
   paid: number;
   balance: number;
   date: string;
@@ -116,7 +129,9 @@ export interface Sale {
   productId: string; // FK
   quantity: number;
   price: number;
-  amount: number;
+  taxRate?: number;
+  taxAmount?: number;
+  amount: number; // Total amount including tax
   paid: number;
   balance: number;
   date: string;
@@ -176,6 +191,8 @@ export type ViewState =
   | 'INVOICES'
   | 'EMPLOYEES'
   | 'BANKS'
+  | 'TAXES'
   | 'PAYROLL'
   | 'DEDUCTIONS'
+  | 'PROFIT_LOSS'
   | 'SETTINGS';

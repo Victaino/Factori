@@ -18,6 +18,8 @@ import { DeductionManager } from './components/DeductionManager';
 import { PayrollManager } from './components/PayrollManager';
 import { InvoiceManager } from './components/InvoiceManager';
 import { SettingsManager } from './components/SettingsManager';
+import { TaxManager } from './components/TaxManager';
+import { ProfitLossManager } from './components/ProfitLossManager';
 import { ViewState } from './types';
 import { SettingsProvider } from './contexts/SettingsContext';
 
@@ -40,8 +42,10 @@ const App: React.FC = () => {
       case 'INVOICES': return <InvoiceManager />;
       case 'EMPLOYEES': return <EmployeeManager />;
       case 'BANKS': return <BankManager />;
+      case 'TAXES': return <TaxManager />;
       case 'DEDUCTIONS': return <DeductionManager />;
       case 'PAYROLL': return <PayrollManager />;
+      case 'PROFIT_LOSS': return <ProfitLossManager />;
       case 'INCIDENTS': return <IncidentManager />;
       case 'RESOURCES': return <ResourceManager />;
       case 'SETTINGS': return <SettingsManager />;

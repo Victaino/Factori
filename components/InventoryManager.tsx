@@ -115,7 +115,11 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
     ]);
     setMaterials(mat);
     setProducts(prod);
-    setInventory(inv);
+    
+    // Safety check: Only keep inventory items that have a corresponding product definition.
+    // This filters out "Unknown Products" caused by previous deletion bugs.
+    const validInventory = inv.filter(i => prod.some(p => p.id === i.productId));
+    setInventory(validInventory);
   };
 
   useEffect(() => {

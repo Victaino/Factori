@@ -21,7 +21,9 @@ import {
   Briefcase,
   ShoppingBag,
   ShoppingCart,
-  CreditCard
+  CreditCard,
+  Percent,
+  BarChart4
 } from 'lucide-react';
 
 // Using a recursive structure for navigation
@@ -54,6 +56,7 @@ export const NAV_ITEMS: NavItem[] = [
       { id: 'SALES', label: 'Sales Log', icon: <TrendingUp size={18} /> },
       { id: 'SALES_ORDERS', label: 'Sales Orders', icon: <ShoppingCart size={18} /> },
       { id: 'INVOICES', label: 'Invoices', icon: <FileText size={18} /> },
+      { id: 'CUSTOMERS', label: 'Customers', icon: <Users size={18} /> },
     ]
   },
   { 
@@ -62,6 +65,8 @@ export const NAV_ITEMS: NavItem[] = [
     icon: <PieChart size={20} />,
     children: [
       { id: 'BANKS', label: 'Banks', icon: <Landmark size={18} /> },
+      { id: 'TAXES', label: 'Taxes', icon: <Percent size={18} /> },
+      { id: 'PROFIT_LOSS', label: 'Profit & Loss', icon: <BarChart4 size={18} /> },
     ]
   },
   { 
@@ -74,7 +79,6 @@ export const NAV_ITEMS: NavItem[] = [
       { id: 'DEDUCTIONS', label: 'Deductions', icon: <FileMinus size={18} /> },
     ]
   },
-  { id: 'CUSTOMERS', label: 'Customers', icon: <Users size={20} /> },
   { id: 'RESOURCES', label: 'Resources', icon: <Settings size={20} /> },
   { id: 'INCIDENTS', label: 'Incidents', icon: <AlertTriangle size={20} /> },
   { id: 'SETTINGS', label: 'Settings', icon: <Settings size={20} /> },

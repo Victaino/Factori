@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
 import { Production, Plant, Operator, Material, Product } from '../types';
-import { Plus, Trash2, Clock, Calendar, Pencil } from 'lucide-react';
+import { Plus, Trash2, Clock, Calendar, Pencil, Search, Filter, X } from 'lucide-react';
 
 export const ProductionManager: React.FC = () => {
   const [data, setData] = useState<Production[]>([]);
@@ -12,6 +12,12 @@ export const ProductionManager: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Filter State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterDate, setFilterDate] = useState('');
+  const [filterPlant, setFilterPlant] = useState('');
+  const [filterProduct, setFilterProduct] = useState('');
 
   // Form State
   const [formData, setFormData] = useState({
@@ -111,10 +117,44 @@ export const ProductionManager: React.FC = () => {
 
   const getEntityName = (list: any[], id: string) => list.find(i => i.id === id)?.name || 'Unknown';
 
+  // Filter Logic
+  const filteredData = useMemo(() => {
+    return data.filter(item => {
+      const plantName = getEntityName(plants, item.plantId).toLowerCase();
+      const productName = getEntityName(products, item.productId).toLowerCase();
+      const operatorName = getEntityName(operators, item.operatorId).toLowerCase();
+      const materialName = getEntityName(materials, item.materialId).toLowerCase();
+      const notes = (item.notes || '').toLowerCase();
+      const term = searchTerm.toLowerCase();
+
+      const matchesSearch = !term || 
+        plantName.includes(term) || 
+        productName.includes(term) || 
+        operatorName.includes(term) || 
+        materialName.includes(term) ||
+        notes.includes(term);
+
+      const matchesDate = !filterDate || item.date === filterDate;
+      const matchesPlant = !filterPlant || item.plantId === filterPlant;
+      const matchesProduct = !filterProduct || item.productId === filterProduct;
+
+      return matchesSearch && matchesDate && matchesPlant && matchesProduct;
+    });
+  }, [data, searchTerm, filterDate, filterPlant, filterProduct, plants, products, operators, materials]);
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setFilterDate('');
+    setFilterPlant('');
+    setFilterProduct('');
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-800">Production Log</h2>
+        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <Filter className="text-blue-600" /> Production Log
+        </h2>
         <button 
           onClick={() => { resetForm(); setIsModalOpen(true); }}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
@@ -123,32 +163,88 @@ export const ProductionManager: React.FC = () => {
         </button>
       </div>
 
+       {/* Filter Toolbar */}
+       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-wrap gap-4 items-center">
+        <div className="flex-1 min-w-[200px] relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+          <input 
+            type="text" 
+            placeholder="Search logs..." 
+            className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        
+        <select 
+          className="border rounded-lg px-3 py-2 bg-white outline-none focus:border-blue-500 text-sm"
+          value={filterPlant}
+          onChange={(e) => setFilterPlant(e.target.value)}
+        >
+          <option value="">All Plants</option>
+          {plants.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+
+        <select 
+          className="border rounded-lg px-3 py-2 bg-white outline-none focus:border-blue-500 text-sm"
+          value={filterProduct}
+          onChange={(e) => setFilterProduct(e.target.value)}
+        >
+          <option value="">All Products</option>
+          {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+
+        <div className="relative">
+            <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+            <input 
+            type="date" 
+            className="border rounded-lg pl-10 pr-3 py-2 bg-white outline-none focus:border-blue-500 text-sm"
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            />
+        </div>
+
+        {(searchTerm || filterDate || filterPlant || filterProduct) && (
+          <button 
+            onClick={clearFilters}
+            className="text-gray-500 hover:text-red-500 flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-gray-50 text-sm"
+          >
+            <X size={16} /> Clear
+          </button>
+        )}
+      </div>
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="p-4 font-semibold text-gray-600">Date</th>
-                <th className="p-4 font-semibold text-gray-600">Product</th>
                 <th className="p-4 font-semibold text-gray-600">Plant</th>
                 <th className="p-4 font-semibold text-gray-600">Operator</th>
-                <th className="p-4 font-semibold text-gray-600">In/Out (Tons)</th>
+                <th className="p-4 font-semibold text-gray-600">Material Used</th>
+                <th className="p-4 font-semibold text-gray-600">Product Output</th>
                 <th className="p-4 font-semibold text-gray-600">Duration</th>
                 <th className="p-4 font-semibold text-gray-600">Notes</th>
                 <th className="p-4 font-semibold text-gray-600 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {data.map(item => (
+              {filteredData.map(item => (
                 <tr key={item.id} className="hover:bg-gray-50">
                   <td className="p-4 text-gray-800">{item.date}</td>
-                  <td className="p-4 text-gray-800">{getEntityName(products, item.productId)}</td>
                   <td className="p-4 text-gray-600">{getEntityName(plants, item.plantId)}</td>
                   <td className="p-4 text-gray-600">{getEntityName(operators, item.operatorId)}</td>
                   <td className="p-4">
                     <div className="flex flex-col">
-                      <span className="text-xs text-gray-500">In: {item.inputTonnage}</span>
-                      <span className="font-medium text-green-600">Out: {item.outputTonnage}</span>
+                       <span className="text-gray-800 font-medium">{getEntityName(materials, item.materialId)}</span>
+                       <span className="text-xs text-gray-500">Qty: {item.inputTonnage} Tons</span>
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <div className="flex flex-col">
+                       <span className="text-gray-800 font-medium">{getEntityName(products, item.productId)}</span>
+                       <span className="text-xs text-green-600">Qty: {item.outputTonnage} Tons</span>
                     </div>
                   </td>
                   <td className="p-4 text-gray-600">{item.duration.toFixed(1)} hrs</td>
@@ -163,9 +259,11 @@ export const ProductionManager: React.FC = () => {
                   </td>
                 </tr>
               ))}
-              {data.length === 0 && (
+              {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-gray-500">No production records found.</td>
+                  <td colSpan={8} className="p-8 text-center text-gray-500">
+                    {data.length === 0 ? "No production records found." : "No records match your filters."}
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -197,14 +295,6 @@ export const ProductionManager: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
-                  <select required className="w-full border rounded-lg p-2"
-                    value={formData.productId} onChange={e => setFormData({...formData, productId: e.target.value})}>
-                    <option value="">Select Product</option>
-                    {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Operator</label>
                   <select required className="w-full border rounded-lg p-2"
                     value={formData.operatorId} onChange={e => setFormData({...formData, operatorId: e.target.value})}>
@@ -224,15 +314,28 @@ export const ProductionManager: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-4 pt-4 border-t">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Input Tonnage</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Input Quantity (Tons)</label>
                   <input required type="number" step="0.1" className="w-full border rounded-lg p-2"
                     value={formData.inputTonnage} onChange={e => setFormData({...formData, inputTonnage: parseFloat(e.target.value)})} />
                 </div>
+                
+                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Produced</label>
+                  <select required className="w-full border rounded-lg p-2"
+                    value={formData.productId} onChange={e => setFormData({...formData, productId: e.target.value})}>
+                    <option value="">Select Product</option>
+                    {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Output Tonnage</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Output Quantity (Tons)</label>
                   <input required type="number" step="0.1" className="w-full border rounded-lg p-2"
                     value={formData.outputTonnage} onChange={e => setFormData({...formData, outputTonnage: parseFloat(e.target.value)})} />
                 </div>
+
+                <div className="col-span-1"></div> {/* Spacer */}
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Time Start</label>
                   <input required type="time" className="w-full border rounded-lg p-2"
@@ -263,14 +366,4 @@ export const ProductionManager: React.FC = () => {
               </div>
 
               <div className="pt-6">
-                <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700">
-                  {editingId ? 'Update Production Record' : 'Save Production Record'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+                <button type="submit" className="w-full bg-blue-600 text-white py-

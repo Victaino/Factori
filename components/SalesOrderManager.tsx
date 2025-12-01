@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
-import { SalesOrder, Customer, Product } from '../types';
+import { SalesOrder, Customer, Product, Tax } from '../types';
 import { ShoppingCart, Plus, Trash2, Calendar, Users, Package, Pencil, Search, X } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 
@@ -10,6 +10,7 @@ export const SalesOrderManager: React.FC = () => {
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [taxes, setTaxes] = useState<Tax[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -26,6 +27,8 @@ export const SalesOrderManager: React.FC = () => {
     orderDate: new Date().toISOString().split('T')[0],
     deliveryDate: '',
     receivedDate: '',
+    taxRate: 0,
+    taxAmount: 0,
     totalAmount: 0,
     status: 'Pending' as 'Pending' | 'Received' | 'Confirmed' | 'Shipped' | 'Cancelled'
   });
@@ -35,6 +38,7 @@ export const SalesOrderManager: React.FC = () => {
         setOrders(await db.getSalesOrders());
         setCustomers(await db.getCustomers());
         setProducts(await db.getProducts());
+        setTaxes(await db.getTaxes());
     };
     fetchData();
   }, []);
@@ -48,36 +52,65 @@ export const SalesOrderManager: React.FC = () => {
       orderDate: new Date().toISOString().split('T')[0],
       deliveryDate: '',
       receivedDate: '',
+      taxRate: 0,
+      taxAmount: 0,
       totalAmount: 0,
       status: 'Pending'
     });
     setEditingId(null);
   };
 
+  const calculateTotals = (qty: number, price: number, taxRate: number) => {
+      const subtotal = qty * price;
+      const taxAmt = subtotal * (taxRate / 100);
+      return {
+          taxAmount: taxAmt,
+          totalAmount: subtotal + taxAmt
+      };
+  };
+
   const handleProductChange = (prodId: string) => {
     const prod = products.find(p => p.id === prodId);
+    const price = prod ? prod.price : 0;
+    const { taxAmount, totalAmount } = calculateTotals(formData.quantity, price, formData.taxRate);
+    
     setFormData(prev => ({
       ...prev,
       productId: prodId,
-      unitPrice: prod ? prod.price : 0,
-      totalAmount: prod ? prod.price * prev.quantity : 0
+      unitPrice: price,
+      taxAmount,
+      totalAmount
     }));
   };
 
   const handleQtyChange = (qty: number) => {
+    const { taxAmount, totalAmount } = calculateTotals(qty, formData.unitPrice, formData.taxRate);
     setFormData(prev => ({
       ...prev,
       quantity: qty,
-      totalAmount: qty * prev.unitPrice
+      taxAmount,
+      totalAmount
     }));
   };
 
   const handlePriceChange = (price: number) => {
+    const { taxAmount, totalAmount } = calculateTotals(formData.quantity, price, formData.taxRate);
     setFormData(prev => ({
       ...prev,
       unitPrice: price,
-      totalAmount: price * prev.quantity
+      taxAmount,
+      totalAmount
     }));
+  };
+
+  const handleTaxChange = (rate: number) => {
+      const { taxAmount, totalAmount } = calculateTotals(formData.quantity, formData.unitPrice, rate);
+      setFormData(prev => ({
+          ...prev,
+          taxRate: rate,
+          taxAmount,
+          totalAmount
+      }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -102,6 +135,8 @@ export const SalesOrderManager: React.FC = () => {
         orderDate: order.orderDate,
         deliveryDate: order.deliveryDate,
         receivedDate: order.receivedDate || '',
+        taxRate: order.taxRate || 0,
+        taxAmount: order.taxAmount || 0,
         totalAmount: order.totalAmount,
         status: order.status
       });
@@ -125,7 +160,6 @@ export const SalesOrderManager: React.FC = () => {
             setOrders(await db.getSalesOrders()); // Refresh full list
         }
     } else if (status === 'Received') {
-        // Auto-set received date to today if setting to Received
         const today = new Date().toISOString().split('T')[0];
         await db.updateSalesOrder(id, { status, receivedDate: today });
         setOrders(orders.map(o => o.id === id ? { ...o, status, receivedDate: today } : o));
@@ -238,9 +272,9 @@ export const SalesOrderManager: React.FC = () => {
                 <th className="p-4 font-semibold text-gray-600">Customer</th>
                 <th className="p-4 font-semibold text-gray-600">Product</th>
                 <th className="p-4 font-semibold text-gray-600">Order Date</th>
-                <th className="p-4 font-semibold text-gray-600">Delivery</th>
                 <th className="p-4 font-semibold text-gray-600">Received Date</th>
-                <th className="p-4 font-semibold text-gray-600">Amount</th>
+                <th className="p-4 font-semibold text-gray-600">Tax</th>
+                <th className="p-4 font-semibold text-gray-600">Total</th>
                 <th className="p-4 font-semibold text-gray-600">Status</th>
                 <th className="p-4 font-semibold text-gray-600 text-right">Actions</th>
               </tr>
@@ -257,8 +291,15 @@ export const SalesOrderManager: React.FC = () => {
                     </div>
                   </td>
                   <td className="p-4 text-gray-600">{order.orderDate}</td>
-                  <td className="p-4 text-gray-600">{order.deliveryDate}</td>
                   <td className="p-4 text-gray-600">{order.receivedDate || '-'}</td>
+                  <td className="p-4 text-gray-600">
+                    {order.taxRate ? (
+                        <div className="flex flex-col">
+                            <span className="text-xs">{order.taxRate}%</span>
+                            <span className="text-xs text-gray-500">{formatCurrency(order.taxAmount || 0)}</span>
+                        </div>
+                    ) : '-'}
+                  </td>
                   <td className="p-4 text-gray-800 font-semibold">{formatCurrency(order.totalAmount)}</td>
                   <td className="p-4">
                     <select 
@@ -345,9 +386,32 @@ export const SalesOrderManager: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Total Amount</label>
-                <input required type="number" min="0" className="w-full border rounded-lg p-2 bg-gray-50" readOnly
-                  value={formData.totalAmount} />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tax</label>
+                <select 
+                    className="w-full border rounded-lg p-2"
+                    value={formData.taxRate}
+                    onChange={e => handleTaxChange(parseFloat(e.target.value))}
+                >
+                    <option value={0}>No Tax (0%)</option>
+                    {taxes.map(t => (
+                        <option key={t.id} value={t.rate}>{t.name} ({t.rate}%)</option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-lg space-y-2 border">
+                  <div className="flex justify-between text-sm text-gray-600">
+                      <span>Subtotal:</span>
+                      <span>{formatCurrency(formData.quantity * formData.unitPrice)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-gray-600">
+                      <span>Tax Amount ({formData.taxRate}%):</span>
+                      <span>{formatCurrency(formData.taxAmount)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-lg text-gray-800 border-t pt-2">
+                      <span>Total Amount:</span>
+                      <span>{formatCurrency(formData.totalAmount)}</span>
+                  </div>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
@@ -377,7 +441,6 @@ export const SalesOrderManager: React.FC = () => {
                     value={formData.status}
                     onChange={(e) => {
                          const newStatus = e.target.value as any;
-                         // Auto-set received date if becoming Received
                          let newReceived = formData.receivedDate;
                          if (newStatus === 'Received' && !newReceived) {
                              newReceived = new Date().toISOString().split('T')[0];
@@ -404,4 +467,3 @@ export const SalesOrderManager: React.FC = () => {
     </div>
   );
 };
-    

@@ -2,7 +2,7 @@
 import { supabase } from './supabase';
 import { 
   Plant, Operator, Material, Product, InventoryItem, Production, IncidentReport, Customer, Supplier, Expense, Sale,
-  Bank, Employee, Deduction, Payroll, PurchaseOrder, SalesOrder
+  Bank, Employee, Deduction, Payroll, PurchaseOrder, SalesOrder, Tax
 } from '../types';
 
 // Helper to generate IDs
@@ -62,8 +62,6 @@ class DatabaseService {
   }
   async updateMaterial(id: string, updates: Partial<Material>) {
     // Note: complex logic for amount updates should optimally be handled, keeping it simple for async conversion
-    // Ideally we fetch, merge, calculate amount, then push. 
-    // For now assuming the UI passes the correct derived data or we rely on basic updates.
     const { price, quantity } = updates;
     let amount = updates.amount;
     if (price !== undefined && quantity !== undefined) amount = price * quantity;
@@ -74,29 +72,46 @@ class DatabaseService {
 
   // --- Products ---
   async getProducts(): Promise<Product[]> { return this.fetchTable('products'); }
+  
   async addProduct(data: Omit<Product, 'id' | 'amount'>): Promise<Product> {
     const newItem = { ...data, id: generateId(), amount: data.price * data.quantity };
     const product = (await this.insert('products', newItem))!;
     
     // AUTOMATION: Create corresponding inventory record when a product is defined
     if(product) {
-        await this.insert('inventory', {
-            id: generateId(),
-            productId: product.id,
-            quantity: product.quantity, // Initial stock from definition
-            price: product.price,
-            lowStockThreshold: 10 // Default threshold
-        });
+        // Check if an inventory item already exists for this product (redundancy check)
+        const { data: existing } = await supabase.from('inventory').select('*').eq('productId', product.id).single();
+        
+        if (!existing) {
+            await this.insert('inventory', {
+                id: generateId(),
+                productId: product.id,
+                quantity: product.quantity, // Initial stock from definition
+                price: product.price,
+                lowStockThreshold: 10 // Default threshold
+            });
+        }
     }
     return product;
   }
+
   async updateProduct(id: string, updates: Partial<Product>) {
-     // Similar simplification for async update
      await this.update('products', id, updates);
+     // Note: If price changes, you might want to update the price in inventory table as well
+     if (updates.price) {
+        const { error } = await supabase.from('inventory').update({ price: updates.price }).eq('productId', id);
+        if (error) console.error("Error syncing product price to inventory", error);
+     }
   }
+
   async deleteProduct(id: string) { 
+      // 1. Delete the Product Definition
       await this.delete('products', id); 
-      // Ideally delete from inventory too, or cascade via DB
+      
+      // 2. Cascade Delete: Remove the corresponding Inventory Record
+      // We use raw supabase call here because we need to delete by productId, not primary key id
+      const { error } = await supabase.from('inventory').delete().eq('productId', id);
+      if (error) console.error(`Error deleting inventory for product ${id}:`, error);
   }
 
   // --- Inventory ---
@@ -193,6 +208,8 @@ class DatabaseService {
             productId: order.productId,
             quantity: order.quantity,
             price: order.unitPrice,
+            taxRate: order.taxRate,
+            taxAmount: order.taxAmount,
             amount: order.totalAmount,
             paid: 0,
             balance: order.totalAmount,
@@ -237,6 +254,14 @@ class DatabaseService {
   }
   async updateBank(id: string, updates: Partial<Bank>) { await this.update('banks', id, updates); }
   async deleteBank(id: string) { await this.delete('banks', id); }
+
+  // --- Taxes ---
+  async getTaxes(): Promise<Tax[]> { return this.fetchTable('taxes'); }
+  async addTax(data: Omit<Tax, 'id'>): Promise<Tax> {
+    return (await this.insert('taxes', { ...data, id: generateId() }))!;
+  }
+  async updateTax(id: string, updates: Partial<Tax>) { await this.update('taxes', id, updates); }
+  async deleteTax(id: string) { await this.delete('taxes', id); }
 
   // --- Employees ---
   async getEmployees(): Promise<Employee[]> { return this.fetchTable('employees'); }

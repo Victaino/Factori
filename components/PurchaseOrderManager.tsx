@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
-import { PurchaseOrder, Supplier } from '../types';
+import { PurchaseOrder, Supplier, Tax } from '../types';
 import { ShoppingBag, Plus, Trash2, Calendar, Truck, Pencil, Search, X } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 
@@ -9,6 +9,7 @@ export const PurchaseOrderManager: React.FC = () => {
   const { formatCurrency } = useSettings();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [taxes, setTaxes] = useState<Tax[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -17,11 +18,16 @@ export const PurchaseOrderManager: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterDate, setFilterDate] = useState('');
 
+  // Auxiliary state for calculating total
+  const [baseAmount, setBaseAmount] = useState(0);
+
   const [formData, setFormData] = useState({
     supplierId: '',
     orderDate: new Date().toISOString().split('T')[0],
     expectedDeliveryDate: '',
     receivedDate: '',
+    taxRate: 0,
+    taxAmount: 0,
     totalAmount: 0,
     status: 'Pending' as 'Pending' | 'Received' | 'Cancelled'
   });
@@ -30,6 +36,7 @@ export const PurchaseOrderManager: React.FC = () => {
     const fetchData = async () => {
         setOrders(await db.getPurchaseOrders());
         setSuppliers(await db.getSuppliers());
+        setTaxes(await db.getTaxes());
     };
     fetchData();
   }, []);
@@ -40,10 +47,41 @@ export const PurchaseOrderManager: React.FC = () => {
       orderDate: new Date().toISOString().split('T')[0],
       expectedDeliveryDate: '',
       receivedDate: '',
+      taxRate: 0,
+      taxAmount: 0,
       totalAmount: 0,
       status: 'Pending'
     });
+    setBaseAmount(0);
     setEditingId(null);
+  };
+
+  const calculateTotal = (base: number, rate: number) => {
+      const taxAmt = base * (rate / 100);
+      return {
+          taxAmount: taxAmt,
+          totalAmount: base + taxAmt
+      };
+  };
+
+  const handleBaseAmountChange = (amt: number) => {
+      setBaseAmount(amt);
+      const { taxAmount, totalAmount } = calculateTotal(amt, formData.taxRate);
+      setFormData(prev => ({
+          ...prev,
+          taxAmount,
+          totalAmount
+      }));
+  };
+
+  const handleTaxChange = (rate: number) => {
+      const { taxAmount, totalAmount } = calculateTotal(baseAmount, rate);
+      setFormData(prev => ({
+          ...prev,
+          taxRate: rate,
+          taxAmount,
+          totalAmount
+      }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,11 +98,21 @@ export const PurchaseOrderManager: React.FC = () => {
   };
 
   const handleEdit = (order: PurchaseOrder) => {
+      // Back-calculate base amount
+      const currentTaxRate = order.taxRate || 0;
+      const currentTotal = order.totalAmount;
+      // Total = Base * (1 + rate/100) -> Base = Total / (1 + rate/100)
+      const calculatedBase = currentTotal / (1 + currentTaxRate / 100);
+      
+      setBaseAmount(parseFloat(calculatedBase.toFixed(2)));
+
       setFormData({
           supplierId: order.supplierId,
           orderDate: order.orderDate,
           expectedDeliveryDate: order.expectedDeliveryDate,
           receivedDate: order.receivedDate || '',
+          taxRate: currentTaxRate,
+          taxAmount: order.taxAmount || 0,
           totalAmount: order.totalAmount,
           status: order.status
       });
@@ -182,9 +230,9 @@ export const PurchaseOrderManager: React.FC = () => {
                 <th className="p-4 font-semibold text-gray-600">ID</th>
                 <th className="p-4 font-semibold text-gray-600">Supplier</th>
                 <th className="p-4 font-semibold text-gray-600">Order Date</th>
-                <th className="p-4 font-semibold text-gray-600">Expected Delivery</th>
                 <th className="p-4 font-semibold text-gray-600">Received Date</th>
-                <th className="p-4 font-semibold text-gray-600">Amount</th>
+                <th className="p-4 font-semibold text-gray-600">Tax</th>
+                <th className="p-4 font-semibold text-gray-600">Total</th>
                 <th className="p-4 font-semibold text-gray-600">Status</th>
                 <th className="p-4 font-semibold text-gray-600 text-right">Actions</th>
               </tr>
@@ -195,8 +243,15 @@ export const PurchaseOrderManager: React.FC = () => {
                   <td className="p-4 text-gray-500 font-mono">#{order.id.slice(0, 6)}</td>
                   <td className="p-4 text-gray-800 font-medium">{getSupplierName(order.supplierId)}</td>
                   <td className="p-4 text-gray-600">{order.orderDate}</td>
-                  <td className="p-4 text-gray-600">{order.expectedDeliveryDate}</td>
                   <td className="p-4 text-gray-600">{order.receivedDate || '-'}</td>
+                  <td className="p-4 text-gray-600">
+                     {order.taxRate ? (
+                        <div className="flex flex-col">
+                            <span className="text-xs">{order.taxRate}%</span>
+                            <span className="text-xs text-gray-500">{formatCurrency(order.taxAmount || 0)}</span>
+                        </div>
+                    ) : '-'}
+                  </td>
                   <td className="p-4 text-gray-800 font-semibold">{formatCurrency(order.totalAmount)}</td>
                   <td className="p-4">
                     <select 
@@ -279,9 +334,38 @@ export const PurchaseOrderManager: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Total Amount</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subtotal Amount (Excl. Tax)</label>
                 <input required type="number" min="0" className="w-full border rounded-lg p-2" 
-                  value={formData.totalAmount} onChange={e => setFormData({...formData, totalAmount: parseFloat(e.target.value)})} />
+                  value={baseAmount} onChange={e => handleBaseAmountChange(parseFloat(e.target.value))} />
+              </div>
+
+               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tax</label>
+                <select 
+                    className="w-full border rounded-lg p-2"
+                    value={formData.taxRate}
+                    onChange={e => handleTaxChange(parseFloat(e.target.value))}
+                >
+                    <option value={0}>No Tax (0%)</option>
+                    {taxes.map(t => (
+                        <option key={t.id} value={t.rate}>{t.name} ({t.rate}%)</option>
+                    ))}
+                </select>
+              </div>
+
+               <div className="bg-gray-50 p-4 rounded-lg space-y-2 border">
+                  <div className="flex justify-between text-sm text-gray-600">
+                      <span>Subtotal:</span>
+                      <span>{formatCurrency(baseAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-gray-600">
+                      <span>Tax Amount ({formData.taxRate}%):</span>
+                      <span>{formatCurrency(formData.taxAmount)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-lg text-gray-800 border-t pt-2">
+                      <span>Total Amount:</span>
+                      <span>{formatCurrency(formData.totalAmount)}</span>
+                  </div>
               </div>
 
               <div>
