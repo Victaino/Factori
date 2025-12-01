@@ -1,0 +1,5 @@
+{
+  "name": "Factori",
+  "description": "A comprehensive production and inventory management system for factories. Features real-time production tracking, inventory control, and incident reporting with a database-driven architecture.",
+  "requestFramePermissions": []
+}

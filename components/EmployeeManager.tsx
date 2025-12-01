@@ -1,0 +1,270 @@
+import React, { useState, useMemo } from 'react';
+import { db } from '../services/db';
+import { Employee, Bank } from '../types';
+import { UserPlus, Trash2, Plus, Mail, Phone, Briefcase, Calendar, CreditCard, Pencil, Search, X } from 'lucide-react';
+
+export const EmployeeManager: React.FC = () => {
+  const [employees, setEmployees] = useState<Employee[]>(db.getEmployees());
+  const [banks, setBanks] = useState<Bank[]>(db.getBanks());
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    position: '',
+    photo: '',
+    phone: '',
+    email: '',
+    salary: 0,
+    bankAccountNo: '',
+    bankId: '',
+    dateEmployed: new Date().toISOString().split('T')[0],
+    dateDisengaged: ''
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingId) {
+        db.updateEmployee(editingId, formData);
+        setEmployees(employees.map(e => e.id === editingId ? { ...e, ...formData } : e));
+    } else {
+        const added = db.addEmployee(formData);
+        setEmployees([...employees, added]);
+    }
+    
+    resetForm();
+    setIsModalOpen(false);
+  };
+
+  const resetForm = () => {
+      setFormData({
+        name: '', position: '', photo: '', phone: '', email: '', salary: 0, 
+        bankAccountNo: '', bankId: '', dateEmployed: new Date().toISOString().split('T')[0], dateDisengaged: ''
+      });
+      setEditingId(null);
+  };
+
+  const handleEdit = (emp: Employee) => {
+      setFormData({
+          name: emp.name,
+          position: emp.position,
+          photo: emp.photo,
+          phone: emp.phone,
+          email: emp.email,
+          salary: emp.salary,
+          bankAccountNo: emp.bankAccountNo,
+          bankId: emp.bankId,
+          dateEmployed: emp.dateEmployed,
+          dateDisengaged: emp.dateDisengaged || ''
+      });
+      setEditingId(emp.id);
+      setIsModalOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm('Delete this employee record?')) {
+      db.deleteEmployee(id);
+      setEmployees(employees.filter(e => e.id !== id));
+    }
+  };
+
+  const getBankName = (id: string) => banks.find(b => b.id === id)?.name || 'Unknown Bank';
+
+  const filteredEmployees = useMemo(() => {
+    return employees.filter(e => 
+      e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      e.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      e.email.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [employees, searchTerm]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+          <UserPlus className="text-indigo-600" /> Employees
+        </h2>
+        <button 
+          onClick={() => { resetForm(); setIsModalOpen(true); }}
+          className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700"
+        >
+          <Plus size={20} /> Add Employee
+        </button>
+      </div>
+
+      {/* Search Bar */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+        <input 
+          type="text" 
+          placeholder="Search name, position, email..." 
+          className="w-full pl-10 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+        {searchTerm && (
+          <button 
+            onClick={() => setSearchTerm('')}
+            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredEmployees.map(emp => (
+          <div key={emp.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow relative group">
+            <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button 
+                    onClick={() => handleEdit(emp)}
+                    className="text-gray-300 hover:text-blue-500"
+                >
+                    <Pencil size={18} />
+                </button>
+                <button 
+                onClick={() => handleDelete(emp.id)}
+                className="text-gray-300 hover:text-red-500"
+                >
+                <Trash2 size={18} />
+                </button>
+            </div>
+
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
+                {emp.photo ? (
+                  <img src={emp.photo} alt={emp.name} className="w-full h-full object-cover" />
+                ) : (
+                  <UserPlus className="text-gray-400" size={32} />
+                )}
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-800 text-lg">{emp.name}</h3>
+                <p className="text-sm text-indigo-600 font-medium flex items-center gap-1">
+                  <Briefcase size={14} /> {emp.position}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-sm text-gray-600">
+              <div className="flex items-center gap-2">
+                <Mail size={16} className="text-gray-400" />
+                <a href={`mailto:${emp.email}`} className="hover:text-indigo-600">{emp.email}</a>
+              </div>
+              <div className="flex items-center gap-2">
+                <Phone size={16} className="text-gray-400" />
+                <span>{emp.phone}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Calendar size={16} className="text-gray-400" />
+                <span>Joined: {emp.dateEmployed}</span>
+              </div>
+              {emp.dateDisengaged && (
+                <div className="flex items-center gap-2 text-red-500">
+                  <Calendar size={16} />
+                  <span>Left: {emp.dateDisengaged}</span>
+                </div>
+              )}
+              
+              <div className="border-t pt-2 mt-3">
+                 <div className="flex justify-between items-center mb-1">
+                   <span className="text-gray-500">Salary:</span>
+                   <span className="font-semibold text-gray-800">${emp.salary.toLocaleString()}</span>
+                 </div>
+                 <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                   <CreditCard size={14} />
+                   <span>{getBankName(emp.bankId)} •••• {emp.bankAccountNo.slice(-4)}</span>
+                 </div>
+              </div>
+            </div>
+          </div>
+        ))}
+        {filteredEmployees.length === 0 && (
+          <div className="col-span-full text-center py-12 text-gray-500">
+            <p>{employees.length === 0 ? "No employees added yet." : "No employees match your search."}</p>
+          </div>
+        )}
+      </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+             <div className="p-6 border-b flex justify-between items-center">
+              <h3 className="text-xl font-bold">{editingId ? 'Edit Employee' : 'New Employee'}</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                   <input required type="text" className="w-full border rounded-lg p-2"
+                     value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                </div>
+                <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
+                   <input required type="text" className="w-full border rounded-lg p-2"
+                     value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} />
+                </div>
+                <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Salary</label>
+                   <input required type="number" min="0" className="w-full border rounded-lg p-2"
+                     value={formData.salary} onChange={e => setFormData({...formData, salary: parseFloat(e.target.value)})} />
+                </div>
+                <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                   <input required type="email" className="w-full border rounded-lg p-2"
+                     value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                </div>
+                <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                   <input required type="tel" className="w-full border rounded-lg p-2"
+                     value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                </div>
+                
+                <div className="col-span-2 border-t pt-4">
+                  <h4 className="font-semibold text-gray-800 mb-3">Bank Details</h4>
+                </div>
+
+                <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Bank</label>
+                   <select required className="w-full border rounded-lg p-2"
+                     value={formData.bankId} onChange={e => setFormData({...formData, bankId: e.target.value})}>
+                     <option value="">Select Bank</option>
+                     {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                   </select>
+                </div>
+                <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Account No.</label>
+                   <input required type="text" className="w-full border rounded-lg p-2"
+                     value={formData.bankAccountNo} onChange={e => setFormData({...formData, bankAccountNo: e.target.value})} />
+                </div>
+
+                <div className="col-span-2 border-t pt-4">
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Photo URL (Optional)</label>
+                   <input type="text" className="w-full border rounded-lg p-2"
+                     placeholder="https://..."
+                     value={formData.photo} onChange={e => setFormData({...formData, photo: e.target.value})} />
+                </div>
+
+                <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Date Employed</label>
+                   <input required type="date" className="w-full border rounded-lg p-2"
+                     value={formData.dateEmployed} onChange={e => setFormData({...formData, dateEmployed: e.target.value})} />
+                </div>
+                 <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Date Disengaged (Optional)</label>
+                   <input type="date" className="w-full border rounded-lg p-2"
+                     value={formData.dateDisengaged} onChange={e => setFormData({...formData, dateDisengaged: e.target.value})} />
+                </div>
+              </div>
+              <button type="submit" className="w-full bg-indigo-600 text-white py-2 rounded-lg mt-4 hover:bg-indigo-700">
+                {editingId ? 'Update Employee' : 'Save Employee'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
