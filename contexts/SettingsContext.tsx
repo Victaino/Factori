@@ -1,4 +1,7 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { db } from '../services/db';
+import { OrganizationSettings } from '../types';
 
 type Theme = 'light' | 'dark' | 'system';
 export type ColorTheme = 'blue' | 'emerald' | 'violet' | 'rose' | 'amber' | 'cyan';
@@ -11,6 +14,10 @@ interface SettingsContextType {
   colorTheme: ColorTheme;
   setColorTheme: (theme: ColorTheme) => void;
   formatCurrency: (amount: number) => string;
+  settings: OrganizationSettings | null;
+  updateSettings: (settings: OrganizationSettings) => void;
+  isConfigured: boolean;
+  loading: boolean;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -92,12 +99,46 @@ const COLOR_PALETTES: Record<ColorTheme, Record<number, string>> = {
 };
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Initialize from localStorage or defaults
-  const [currency, setCurrency] = useState<string>(() => localStorage.getItem('app_currency') || '$');
-  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('app_theme') as Theme) || 'system');
-  const [colorTheme, setColorTheme] = useState<ColorTheme>(() => (localStorage.getItem('app_color_theme') as ColorTheme) || 'blue');
+  const [loading, setLoading] = useState(true);
+  const [settings, setSettings] = useState<OrganizationSettings | null>(null);
+  
+  // Local state for immediate UI feedback (backed by org settings when available)
+  const [currency, setCurrency] = useState<string>('$');
+  const [theme, setTheme] = useState<Theme>('system');
+  const [colorTheme, setColorTheme] = useState<ColorTheme>('blue');
 
-  // Persist currency changes
+  // Load Organization Settings on Mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      const orgSettings = await db.getOrganizationSettings();
+      if (orgSettings) {
+        setSettings(orgSettings);
+        setCurrency(orgSettings.baseCurrency || '$');
+        setTheme((orgSettings.defaultTheme as Theme) || 'system');
+        setColorTheme((orgSettings.defaultColorTheme as ColorTheme) || 'blue');
+      } else {
+        // Fallback to local storage if no org settings yet (e.g. before setup)
+        setCurrency(localStorage.getItem('app_currency') || '$');
+        setTheme((localStorage.getItem('app_theme') as Theme) || 'system');
+        setColorTheme((localStorage.getItem('app_color_theme') as ColorTheme) || 'blue');
+      }
+      setLoading(false);
+    };
+    loadSettings();
+  }, []);
+
+  const updateSettings = (newSettings: OrganizationSettings) => {
+      if (!newSettings) {
+          console.error("updateSettings called with null. Database insertion likely failed.");
+          return;
+      }
+      setSettings(newSettings);
+      setCurrency(newSettings.baseCurrency || '$');
+      setTheme((newSettings.defaultTheme as Theme) || 'system');
+      setColorTheme((newSettings.defaultColorTheme as ColorTheme) || 'blue');
+  };
+
+  // Persist local preferences (redundancy) and apply styles
   useEffect(() => {
     localStorage.setItem('app_currency', currency);
   }, [currency]);
@@ -131,12 +172,20 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Helper to format currency
   const formatCurrency = (amount: number) => {
-    // Basic formatting with commas and symbol
-    return `${currency}${amount.toLocaleString()}`;
+    return `${currency}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   return (
-    <SettingsContext.Provider value={{ currency, setCurrency, theme, setTheme, colorTheme, setColorTheme, formatCurrency }}>
+    <SettingsContext.Provider value={{ 
+        currency, setCurrency, 
+        theme, setTheme, 
+        colorTheme, setColorTheme, 
+        formatCurrency,
+        settings,
+        updateSettings,
+        isConfigured: !!settings,
+        loading
+    }}>
       {children}
     </SettingsContext.Provider>
   );

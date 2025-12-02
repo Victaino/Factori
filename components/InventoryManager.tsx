@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { db } from '../services/db';
+import { db, STORAGE_FIX_SQL } from '../services/db';
 import { Material, Product, InventoryItem } from '../types';
-import { Plus, Trash2, Box, Package, ShoppingCart, Save, AlertTriangle, Pencil, Check, X, ArrowRightLeft, Image as ImageIcon, Search } from 'lucide-react';
+import { Plus, Trash2, Box, Package, ShoppingCart, Save, AlertTriangle, Pencil, Check, X, ArrowRightLeft, Image as ImageIcon, Search, Upload, Loader2, AlertCircle, Link as LinkIcon, Copy } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 
 type Tab = 'MATERIALS' | 'PRODUCTS' | 'INVENTORY';
@@ -103,6 +103,12 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null); // Polymorphic state for Material or Product
   const [modalType, setModalType] = useState<'MATERIAL' | 'PRODUCT' | null>(null);
+  
+  // Upload State
+  const [uploading, setUploading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [useUrlInput, setUseUrlInput] = useState(false);
 
   // Form Data
   const [formData, setFormData] = useState({ name: '', price: 0, quantity: 0, imageUrl: '' });
@@ -117,7 +123,6 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
     setProducts(prod);
     
     // Safety check: Only keep inventory items that have a corresponding product definition.
-    // This filters out "Unknown Products" caused by previous deletion bugs.
     const validInventory = inv.filter(i => prod.some(p => p.id === i.productId));
     setInventory(validInventory);
   };
@@ -182,6 +187,9 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
     setEditingItem(null);
     setModalType(null);
     setFormData({ name: '', price: 0, quantity: 0, imageUrl: '' });
+    setPreviewUrl(null);
+    setUploadError(null);
+    setUseUrlInput(false);
     refreshData();
   };
 
@@ -194,6 +202,9 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
       quantity: item.quantity,
       imageUrl: item.imageUrl || ''
     });
+    setPreviewUrl(item.imageUrl || null);
+    setUploadError(null);
+    setUseUrlInput(!!item.imageUrl && !item.imageUrl.includes('supabase')); // If it's an external URL, default to URL input mode
     setIsModalOpen(true);
   };
 
@@ -201,6 +212,9 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
     setEditingItem(null);
     setModalType(type);
     setFormData({ name: '', price: 0, quantity: 0, imageUrl: '' });
+    setPreviewUrl(null);
+    setUploadError(null);
+    setUseUrlInput(false);
     setIsModalOpen(true);
   };
 
@@ -219,6 +233,42 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
   const handleUpdateThreshold = async (id: string, newThreshold: number) => {
     await db.updateInventory(id, { lowStockThreshold: newThreshold });
     refreshData();
+  };
+  
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      const file = files[0];
+
+      setUploading(true);
+      setUploadError(null);
+      
+      // Create immediate preview
+      const objectUrl = URL.createObjectURL(file);
+      setPreviewUrl(objectUrl);
+
+      try {
+          const url = await db.uploadImage(file);
+          setFormData(prev => ({ ...prev, imageUrl: url }));
+      } catch (err: any) {
+          const isBucketError = err.message.includes('bucket not found') || err.message.includes('storage bucket');
+          const isRlsError = err.message.includes('Permission Denied') || err.message.includes('RLS') || err.message.includes('security policy');
+          
+          if (isBucketError) {
+              setUploadError('Upload storage not configured. Switched to manual URL mode.');
+          } else if (isRlsError) {
+              setUploadError('Storage permission denied (RLS). Switched to manual URL mode.');
+          } else {
+              console.error("Upload failed", err); // Only log unexpected
+              setUploadError(err.message || "Upload failed");
+          }
+          
+          setUseUrlInput(true); // Auto switch to manual input on failure
+      } finally {
+          setUploading(false);
+          // Clear input to allow re-selection of same file if needed
+          e.target.value = ''; 
+      }
   };
 
   const getProductName = (id: string) => products.find(p => p.id === id)?.name || 'Unknown Product';
@@ -415,46 +465,134 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
       {/* Shared Modal for Materials and Products */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-md">
+          <div className="bg-white rounded-2xl w-full max-w-lg overflow-y-auto max-h-[90vh]">
             <div className="p-6 border-b flex justify-between items-center">
               <h3 className="text-xl font-bold">
                 {editingItem ? 'Edit' : 'Add'} {modalType === 'MATERIAL' ? 'Material' : 'Product'}
               </h3>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">&times;</button>
             </div>
-            <form onSubmit={handleSave} className="p-6 space-y-4">
+            <form onSubmit={handleSave} className="p-6 space-y-6">
+              
+              {/* Product Image Section */}
+              {modalType === 'PRODUCT' && (
+                <div className="space-y-2">
+                   <div className="flex justify-between items-center">
+                       <label className="block text-sm font-medium text-gray-700">Product Image</label>
+                       <button 
+                        type="button"
+                        onClick={() => setUseUrlInput(!useUrlInput)}
+                        className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                       >
+                           {useUrlInput ? <Upload size={12} /> : <LinkIcon size={12} />}
+                           {useUrlInput ? 'Switch to Upload' : 'Enter URL manually'}
+                       </button>
+                   </div>
+                   
+                   {useUrlInput ? (
+                       <div className="space-y-2">
+                            <input 
+                                type="url" 
+                                className="w-full border rounded-lg p-2"
+                                placeholder="https://example.com/image.jpg"
+                                value={formData.imageUrl} 
+                                onChange={e => {
+                                    setFormData({...formData, imageUrl: e.target.value});
+                                    setPreviewUrl(e.target.value);
+                                }} 
+                            />
+                            {uploadError && (
+                                <div className="text-xs text-amber-600 bg-amber-50 p-3 rounded border border-amber-200">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <AlertCircle size={14} className="flex-shrink-0" /> 
+                                        <span className="font-semibold">Upload Failed</span>
+                                    </div>
+                                    <p className="mb-2">{uploadError}</p>
+                                    
+                                    {(uploadError.includes('RLS') || uploadError.includes('configured')) && (
+                                        <button 
+                                            type="button"
+                                            onClick={() => navigator.clipboard.writeText(STORAGE_FIX_SQL)}
+                                            className="text-xs bg-white border border-amber-300 px-2 py-1 rounded shadow-sm hover:bg-amber-50 flex items-center gap-1 text-amber-800"
+                                        >
+                                            <Copy size={12} /> Copy SQL Fix
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                       </div>
+                   ) : (
+                       <div className="flex items-start gap-4">
+                           <div className="relative group w-32 h-32 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden hover:border-blue-500 transition-colors flex-shrink-0 bg-white">
+                               {previewUrl || formData.imageUrl ? (
+                                   <img src={previewUrl || formData.imageUrl} alt="Preview" className="w-full h-full object-contain p-2" />
+                               ) : (
+                                   <div className="flex flex-col items-center text-gray-400">
+                                       <ImageIcon size={32} className="mb-2" />
+                                       <span className="text-xs">No Image</span>
+                                   </div>
+                               )}
+                               
+                               {uploading && (
+                                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10 rounded-xl">
+                                       <Loader2 size={24} className="text-white animate-spin" />
+                                   </div>
+                               )}
+
+                               <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 text-white font-medium rounded-xl">
+                                   <Upload size={24} className="mb-1" />
+                                   <span className="text-xs">{formData.imageUrl || previewUrl ? 'Change' : 'Upload'}</span>
+                                   <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
+                               </label>
+                           </div>
+                           
+                           <div className="flex-1 space-y-3 pt-2">
+                               <div className="text-xs text-gray-500">
+                                   <p className="font-medium text-gray-700 mb-1">Recommended</p>
+                                   <p>Square JPG/PNG image.</p>
+                                   <p>Max size: 1MB.</p>
+                               </div>
+                               {(previewUrl || formData.imageUrl) && (
+                                   <button 
+                                    type="button"
+                                    onClick={() => {
+                                        setFormData(prev => ({ ...prev, imageUrl: '' }));
+                                        setPreviewUrl(null);
+                                        setUploadError(null);
+                                    }}
+                                    className="text-xs text-red-600 hover:text-red-700 flex items-center gap-1 border border-red-200 px-2 py-1 rounded bg-red-50"
+                                   >
+                                       <X size={14} /> Remove Image
+                                   </button>
+                               )}
+                           </div>
+                       </div>
+                   )}
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
                 <input required type="text" className="w-full border rounded-lg p-2"
                   value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
               </div>
-              
-              {modalType === 'PRODUCT' && (
-                <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">Image URL (Optional)</label>
-                   <div className="relative">
-                     <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                     <input type="text" className="w-full border rounded-lg pl-9 pr-2 py-2"
-                       placeholder="https://..."
-                       value={formData.imageUrl} onChange={e => setFormData({...formData, imageUrl: e.target.value})} />
-                   </div>
-                </div>
-              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                    <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
-                   <input required type="number" min="0" className="w-full border rounded-lg p-2"
+                   <input required type="number" min="0" step="0.01" className="w-full border rounded-lg p-2"
                      value={formData.price} onChange={e => setFormData({...formData, price: parseFloat(e.target.value)})} />
                 </div>
                 <div>
                    <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                   <input required type="number" min="0" className="w-full border rounded-lg p-2"
+                   <input required type="number" min="0" step="0.01" className="w-full border rounded-lg p-2"
                      value={formData.quantity} onChange={e => setFormData({...formData, quantity: parseFloat(e.target.value)})} />
                 </div>
               </div>
-              <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700">
-                Save
+              
+              <button type="submit" disabled={uploading} className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                {uploading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+                {uploading ? 'Uploading Image...' : 'Save Details'}
               </button>
             </form>
           </div>

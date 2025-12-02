@@ -23,8 +23,11 @@ import {
   ShoppingCart,
   CreditCard,
   Percent,
-  BarChart4
+  BarChart4,
+  Shield,
+  Key
 } from 'lucide-react';
+import { ViewState } from './types';
 
 // Using a recursive structure for navigation
 export type NavItem = {
@@ -81,7 +84,16 @@ export const NAV_ITEMS: NavItem[] = [
   },
   { id: 'RESOURCES', label: 'Resources', icon: <Settings size={20} /> },
   { id: 'INCIDENTS', label: 'Incidents', icon: <AlertTriangle size={20} /> },
-  { id: 'SETTINGS', label: 'Settings', icon: <Settings size={20} /> },
+  { 
+    id: 'SETTINGS_GROUP',
+    label: 'System', 
+    icon: <Settings size={20} />,
+    children: [
+        { id: 'SETTINGS', label: 'Settings', icon: <Settings size={18} /> },
+        { id: 'USERS', label: 'User Management', icon: <Shield size={18} /> },
+        { id: 'ROLES', label: 'Access Control', icon: <Key size={18} /> },
+    ]
+  },
 ];
 
 export const getPageTitle = (viewId: string): string => {
@@ -93,4 +105,25 @@ export const getPageTitle = (viewId: string): string => {
     }
   }
   return 'Dashboard';
+};
+
+// Helper to flatten nav items for permission selection
+export const getAllPermissions = () => {
+    const perms: {id: string, label: string, group?: string}[] = [];
+    
+    // Add implicit permissions or sub-views not in main nav here if needed
+    // e.g. MATERIALS, PRODUCTS are distinct ViewStates but share Inventory menu in code sometimes?
+    // Based on `types.ts`, MATERIALS and PRODUCTS are ViewStates. We should add them manually if they aren't explicit in nav structure.
+    perms.push({ id: 'MATERIALS', label: 'Raw Materials', group: 'Inventory' });
+    perms.push({ id: 'PRODUCTS', label: 'Product Definitions', group: 'Inventory' });
+
+    NAV_ITEMS.forEach(item => {
+        perms.push({ id: item.id, label: item.label, group: 'Main Menu' });
+        if(item.children) {
+            item.children.forEach(child => {
+                 perms.push({ id: child.id, label: child.label, group: item.label });
+            });
+        }
+    });
+    return perms;
 };

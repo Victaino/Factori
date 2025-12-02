@@ -6,7 +6,7 @@ import { ShoppingCart, Plus, Trash2, Calendar, Users, Package, Pencil, Search, X
 import { useSettings } from '../contexts/SettingsContext';
 
 export const SalesOrderManager: React.FC = () => {
-  const { formatCurrency } = useSettings();
+  const { formatCurrency, settings } = useSettings();
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -27,7 +27,7 @@ export const SalesOrderManager: React.FC = () => {
     orderDate: new Date().toISOString().split('T')[0],
     deliveryDate: '',
     receivedDate: '',
-    taxRate: 0,
+    taxRate: settings?.taxRate || 0,
     taxAmount: 0,
     totalAmount: 0,
     status: 'Pending' as 'Pending' | 'Received' | 'Confirmed' | 'Shipped' | 'Cancelled'
@@ -43,6 +43,13 @@ export const SalesOrderManager: React.FC = () => {
     fetchData();
   }, []);
 
+  // Update default tax rate if settings load late
+  useEffect(() => {
+    if (!editingId && settings?.taxRate) {
+        setFormData(prev => ({ ...prev, taxRate: settings.taxRate }));
+    }
+  }, [settings, editingId]);
+
   const resetForm = () => {
     setFormData({
       customerId: '',
@@ -52,7 +59,7 @@ export const SalesOrderManager: React.FC = () => {
       orderDate: new Date().toISOString().split('T')[0],
       deliveryDate: '',
       receivedDate: '',
-      taxRate: 0,
+      taxRate: settings?.taxRate || 0,
       taxAmount: 0,
       totalAmount: 0,
       status: 'Pending'
@@ -211,7 +218,7 @@ export const SalesOrderManager: React.FC = () => {
         </h2>
         <button 
           onClick={() => { resetForm(); setIsModalOpen(true); }}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
         >
           <Plus size={20} /> Create Order
         </button>
@@ -393,6 +400,12 @@ export const SalesOrderManager: React.FC = () => {
                     onChange={e => handleTaxChange(parseFloat(e.target.value))}
                 >
                     <option value={0}>No Tax (0%)</option>
+                    {/* Organization Default */}
+                    {settings?.taxRate && (
+                        <option value={settings.taxRate}>
+                            {settings.taxName || 'Org Default'} ({settings.taxRate}%)
+                        </option>
+                    )}
                     {taxes.map(t => (
                         <option key={t.id} value={t.rate}>{t.name} ({t.rate}%)</option>
                     ))}

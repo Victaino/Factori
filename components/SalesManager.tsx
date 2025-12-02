@@ -79,7 +79,7 @@ const SaleRow: React.FC<SaleRowProps> = ({
 };
 
 export const SalesManager: React.FC = () => {
-  const { formatCurrency } = useSettings();
+  const { formatCurrency, settings } = useSettings();
   const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -102,7 +102,7 @@ export const SalesManager: React.FC = () => {
     price: 0,
     paid: 0,
     date: new Date().toISOString().split('T')[0],
-    taxRate: 0,
+    taxRate: settings?.taxRate || 0,
     taxAmount: 0,
     amount: 0 // Total amount
   });
@@ -117,6 +117,13 @@ export const SalesManager: React.FC = () => {
   useEffect(() => {
     refreshData();
   }, []);
+
+  // Update default tax
+  useEffect(() => {
+    if (!editingId && settings?.taxRate) {
+        setFormData(prev => ({ ...prev, taxRate: settings.taxRate }));
+    }
+  }, [settings, editingId]);
 
   const getCustomerName = (id: string) => customers.find(c => c.id === id)?.name || 'Unknown Customer';
   const getProductName = (id: string) => products.find(p => p.id === id)?.name || 'Unknown Product';
@@ -240,7 +247,7 @@ export const SalesManager: React.FC = () => {
       price: 0,
       paid: 0,
       date: new Date().toISOString().split('T')[0],
-      taxRate: 0,
+      taxRate: settings?.taxRate || 0,
       taxAmount: 0,
       amount: 0
     });
@@ -462,6 +469,12 @@ export const SalesManager: React.FC = () => {
                     onChange={e => updateFormCalculations(formData.quantity, formData.price, parseFloat(e.target.value))}
                 >
                     <option value={0}>No Tax (0%)</option>
+                    {/* Organization Default */}
+                    {settings?.taxRate && (
+                        <option value={settings.taxRate}>
+                            {settings.taxName || 'Org Default'} ({settings.taxRate}%)
+                        </option>
+                    )}
                     {taxes.map(t => (
                         <option key={t.id} value={t.rate}>{t.name} ({t.rate}%)</option>
                     ))}

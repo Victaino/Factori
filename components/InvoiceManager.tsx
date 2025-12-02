@@ -6,7 +6,7 @@ import { FileText, Mail, Printer, Eye, X, Download, Search } from 'lucide-react'
 import { useSettings } from '../contexts/SettingsContext';
 
 export const InvoiceManager: React.FC = () => {
-  const { formatCurrency } = useSettings();
+  const { formatCurrency, settings } = useSettings();
   const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -43,8 +43,8 @@ export const InvoiceManager: React.FC = () => {
     const product = getProduct(selectedSale.productId);
     if (!customer || !product) return;
 
-    const subject = `Invoice #${selectedSale.id} - Factori Production`;
-    const body = `Dear ${customer.contactPerson},%0D%0A%0D%0APlease find the invoice details below for your recent purchase.%0D%0A%0D%0AInvoice ID: ${selectedSale.id}%0D%0ADate: ${selectedSale.date}%0D%0AProduct: ${product.name}%0D%0AQuantity: ${selectedSale.quantity}%0D%0ATotal Amount: ${formatCurrency(selectedSale.amount)}%0D%0ABalance Due: ${formatCurrency(selectedSale.balance)}%0D%0A%0D%0AKind regards,%0D%0AFactori Accounts Team`;
+    const subject = `Invoice #${selectedSale.id} - ${settings?.companyName || 'Factori'}`;
+    const body = `Dear ${customer.contactPerson},%0D%0A%0D%0APlease find the invoice details below for your recent purchase.%0D%0A%0D%0AInvoice ID: ${selectedSale.id}%0D%0ADate: ${selectedSale.date}%0D%0AProduct: ${product.name}%0D%0AQuantity: ${selectedSale.quantity}%0D%0ATotal Amount: ${formatCurrency(selectedSale.amount)}%0D%0ABalance Due: ${formatCurrency(selectedSale.balance)}%0D%0A%0D%0AKind regards,%0D%0A${settings?.companyName || 'Accounts Team'}`;
 
     window.location.href = `mailto:${customer.email}?subject=${subject}&body=${body}`;
   };
@@ -185,14 +185,17 @@ export const InvoiceManager: React.FC = () => {
               {/* Header */}
               <div className="flex justify-between items-start mb-8 border-b pb-8">
                 <div>
-                  <h1 className="text-3xl font-bold text-gray-800 tracking-tight">INVOICE</h1>
-                  <p className="text-gray-500 mt-1">#{selectedSale.id}</p>
+                    {settings?.companyLogo ? (
+                         <img src={settings.companyLogo} alt="Logo" className="h-16 mb-4 object-contain" />
+                    ) : (
+                         <h1 className="text-3xl font-bold text-gray-800 tracking-tight mb-2">INVOICE</h1>
+                    )}
+                  <p className="text-gray-500 mt-1">Invoice #{selectedSale.id}</p>
                 </div>
                 <div className="text-right">
-                  <h2 className="text-xl font-bold text-gray-800">Factori Ltd.</h2>
-                  <p className="text-sm text-gray-500">123 Industrial Park</p>
-                  <p className="text-sm text-gray-500">Manufacturing City, 90210</p>
-                  <p className="text-sm text-gray-500">accounts@factori.com</p>
+                  <h2 className="text-xl font-bold text-gray-800">{settings?.companyName || 'Factori Ltd.'}</h2>
+                  <p className="text-sm text-gray-500 whitespace-pre-wrap max-w-xs ml-auto">{settings?.companyAddress || 'No Address Configured'}</p>
+                  {settings?.companyTin && <p className="text-sm text-gray-500">TIN: {settings.companyTin}</p>}
                 </div>
               </div>
 
@@ -237,7 +240,7 @@ export const InvoiceManager: React.FC = () => {
                       <td className="p-3 font-medium text-gray-800">{getProduct(selectedSale.productId)?.name}</td>
                       <td className="p-3 text-right text-gray-600">{selectedSale.quantity}</td>
                       <td className="p-3 text-right text-gray-600">{formatCurrency(selectedSale.price)}</td>
-                      <td className="p-3 text-right font-semibold text-gray-800">{formatCurrency(selectedSale.amount)}</td>
+                      <td className="p-3 text-right font-semibold text-gray-800">{formatCurrency(selectedSale.price * selectedSale.quantity)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -248,12 +251,14 @@ export const InvoiceManager: React.FC = () => {
                 <div className="w-64 space-y-2">
                   <div className="flex justify-between text-gray-600">
                     <span>Subtotal</span>
-                    <span>{formatCurrency(selectedSale.amount)}</span>
+                    <span>{formatCurrency(selectedSale.price * selectedSale.quantity)}</span>
                   </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>Tax (0%)</span>
-                    <span>{formatCurrency(0)}</span>
-                  </div>
+                  {selectedSale.taxAmount ? (
+                       <div className="flex justify-between text-gray-600">
+                        <span>Tax {selectedSale.taxRate ? `(${selectedSale.taxRate}%)` : ''}</span>
+                        <span>{formatCurrency(selectedSale.taxAmount)}</span>
+                      </div>
+                  ) : null}
                   <div className="flex justify-between font-bold text-lg text-gray-800 border-t pt-2">
                     <span>Total</span>
                     <span>{formatCurrency(selectedSale.amount)}</span>

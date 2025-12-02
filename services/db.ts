@@ -2,11 +2,27 @@
 import { supabase } from './supabase';
 import { 
   Plant, Operator, Material, Product, InventoryItem, Production, IncidentReport, Customer, Supplier, Expense, Sale,
-  Bank, Employee, Deduction, Payroll, PurchaseOrder, SalesOrder, Tax
+  Bank, Employee, Deduction, Payroll, PurchaseOrder, SalesOrder, Tax, User, Role, OrganizationSettings
 } from '../types';
 
 // Helper to generate IDs
 const generateId = () => Math.random().toString(36).substr(2, 9);
+
+export const STORAGE_FIX_SQL = `
+-- Run this in Supabase SQL Editor to fix Storage permissions
+insert into storage.buckets (id, name, public)
+values ('organization-assets', 'organization-assets', true)
+on conflict (id) do nothing;
+
+alter table storage.objects enable row level security;
+
+drop policy if exists "Public Access" on storage.objects;
+
+create policy "Public Access"
+on storage.objects for all
+using ( bucket_id = 'organization-assets' )
+with check ( bucket_id = 'organization-assets' );
+`;
 
 class DatabaseService {
   
@@ -19,11 +35,11 @@ class DatabaseService {
     return data as T[];
   }
 
-  private async insert<T>(table: string, row: T): Promise<T | null> {
+  private async insert<T>(table: string, row: T): Promise<T> {
     const { data, error } = await supabase.from(table).insert(row).select().single();
     if (error) {
-      console.error(`Error inserting into ${table}:`, error);
-      return null;
+      console.error(`Error inserting into ${table}:`, JSON.stringify(error, null, 2));
+      throw new Error(`Failed to insert into ${table}: ${error.message}`);
     }
     return data as T;
   }
@@ -36,6 +52,229 @@ class DatabaseService {
   private async delete(table: string, id: string): Promise<void> {
     const { error } = await supabase.from(table).delete().eq('id', id);
     if (error) console.error(`Error deleting from ${table}:`, error);
+  }
+
+  // --- Image Compression Helper ---
+  private async compressImage(file: File): Promise<File> {
+    // If file is already < 1MB, return it
+    if (file.size <= 1024 * 1024) return file;
+
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.src = objectUrl;
+      
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl); // Clean up
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Scale down if too large (max 1920px width/height)
+        const maxSize = 1920;
+        if (width > height) {
+          if (width > maxSize) {
+            height *= maxSize / width;
+            width = maxSize;
+          }
+        } else {
+          if (height > maxSize) {
+            width *= maxSize / height;
+            height = maxSize;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            resolve(file); // Fallback
+            return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Compress to JPEG with 0.7 quality
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          // If compression worked and result is smaller, use it. Otherwise use original.
+          if (blob.size < file.size) {
+             const compressedFile = new File([blob], file.name, {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+          } else {
+              resolve(file);
+          }
+        }, 'image/jpeg', 0.7);
+      };
+      
+      img.onerror = (err) => {
+          URL.revokeObjectURL(objectUrl);
+          console.warn("Image compression failed, using original file", err);
+          resolve(file); // Fallback to original on error
+      };
+    });
+  }
+
+  // --- File Upload ---
+  async uploadLogo(file: File): Promise<string> {
+    return this.uploadImage(file);
+  }
+
+  async uploadImage(file: File): Promise<string> {
+    try {
+        // 1. Compress Image
+        const compressedFile = await this.compressImage(file);
+
+        const fileName = `asset-${Date.now()}-${compressedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+        
+        // 2. Upload to 'organization-assets' bucket
+        const { data, error } = await supabase.storage
+            .from('organization-assets')
+            .upload(fileName, compressedFile, {
+                cacheControl: '3600',
+                upsert: false
+            });
+
+        if (error) {
+            // Enhanced error message for common setup issue
+            if (error.message.includes('not found') || (error as any).statusCode === '404') {
+                throw new Error("Storage bucket 'organization-assets' not found. Please go to Supabase Dashboard -> Storage -> Create a new public bucket named 'organization-assets'.");
+            }
+            if (error.message.includes('row-level security') || error.message.includes('policy')) {
+                throw new Error("Upload Permission Denied. Go to Supabase Storage -> Policies -> Add Policy to allow INSERT/SELECT for 'organization-assets'.");
+            }
+            throw error;
+        }
+
+        // 3. Get Public URL
+        const { data: publicUrlData } = supabase.storage
+            .from('organization-assets')
+            .getPublicUrl(fileName);
+
+        return publicUrlData.publicUrl;
+    } catch (error: any) {
+        // Only log truly unexpected errors to avoid console noise for known config issues
+        const msg = error.message || "Image upload failed";
+        if (!msg.includes('not found') && !msg.includes('Permission Denied') && !msg.includes('row-level security')) {
+             console.error("Upload Service Error:", error);
+        }
+        throw new Error(msg);
+    }
+  }
+
+  // --- Authentication & Users ---
+
+  async authenticate(username: string, password: string): Promise<{ user: User, permissions: string[] } | null> {
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('*')
+      .eq('username', username)
+      .eq('password', password) // Note: In production, verify hash, don't query plain text
+      .single();
+
+    if (error || !data) {
+        // Fallback for the hardcoded admin if database table is empty or connection issues during initial setup
+        if (username === 'admin' && password === '123admin456') {
+             // Ensure this user actually exists in DB to prevent future confusion
+             const adminUser: User = {
+                 id: 'admin-seed',
+                 username: 'admin',
+                 name: 'System Administrator',
+                 role: 'admin',
+                 lastLogin: new Date().toISOString()
+             };
+             // Ensure Admin Role exists
+             await this.seedAdminRole();
+             // Try to seed user silently
+             try {
+                await this.addAppUser({...adminUser, password: '123admin456'}); 
+             } catch (e) {
+                 // Ignore if already exists
+             }
+             // Return admin with ALL privileges (handled by permissions or logic)
+             return { user: adminUser, permissions: ['ALL'] };
+        }
+        return null;
+    }
+
+    // Update last login
+    await this.update('app_users', data.id, { lastLogin: new Date().toISOString() });
+    
+    // Fetch Permissions for the user's role
+    const { data: roleData } = await supabase.from('roles').select('permissions').eq('name', data.role).single();
+    
+    const permissions = roleData?.permissions || [];
+
+    // Fallback: If it's the specific admin user, ensure they have access even if role table fails
+    if (data.username === 'admin' && permissions.length === 0) {
+        return { user: data as User, permissions: ['ALL'] };
+    }
+
+    return { user: data as User, permissions };
+  }
+
+  async seedAdminRole() {
+      // Create admin role if it doesn't exist
+      const { data } = await supabase.from('roles').select('*').eq('name', 'admin').single();
+      if (!data) {
+          // Grant access to basic views + settings
+          const allPerms = ["DASHBOARD", "PRODUCTION", "INVENTORY", "MATERIALS", "PRODUCTS", "PROCUREMENT_GROUP", "SUPPLIERS", "PURCHASE_ORDERS", "EXPENSES", "SALES_BILLING_GROUP", "SALES", "SALES_ORDERS", "INVOICES", "CUSTOMERS", "FINANCE_GROUP", "BANKS", "TAXES", "PROFIT_LOSS", "HR_GROUP", "EMPLOYEES", "PAYROLL", "DEDUCTIONS", "RESOURCES", "INCIDENTS", "SETTINGS_GROUP", "SETTINGS", "USERS", "ROLES"];
+          await this.insert('roles', {
+              id: generateId(),
+              name: 'admin',
+              description: 'System Administrator',
+              permissions: allPerms
+          });
+      }
+  }
+
+  async getAppUsers(): Promise<User[]> { return this.fetchTable('app_users'); }
+  
+  async addAppUser(data: Omit<User, 'id'> & { password?: string }): Promise<User> {
+    // Check for existing username
+    const { data: existing } = await supabase.from('app_users').select('*').eq('username', data.username).single();
+    if(existing) return existing as User;
+
+    return (await this.insert('app_users', { ...data, id: generateId() }))!;
+  }
+  
+  async updateAppUser(id: string, updates: Partial<User>) { await this.update('app_users', id, updates); }
+  async deleteAppUser(id: string) { await this.delete('app_users', id); }
+
+  // --- Roles ---
+  async getRoles(): Promise<Role[]> { return this.fetchTable('roles'); }
+  async addRole(data: Omit<Role, 'id'>): Promise<Role> {
+      return (await this.insert('roles', { ...data, id: generateId() }))!;
+  }
+  async updateRole(id: string, updates: Partial<Role>) { await this.update('roles', id, updates); }
+  async deleteRole(id: string) { await this.delete('roles', id); }
+
+  // --- Organization Settings ---
+  async getOrganizationSettings(): Promise<OrganizationSettings | null> {
+      const { data, error } = await supabase.from('organization_settings').select('*').limit(1).maybeSingle();
+      if (error) console.error("Error fetching org settings", error);
+      return data as OrganizationSettings;
+  }
+
+  async saveOrganizationSettings(data: Omit<OrganizationSettings, 'id'>): Promise<OrganizationSettings> {
+      // Check if exists
+      const existing = await this.getOrganizationSettings();
+      if (existing) {
+          await this.update('organization_settings', existing.id, data);
+          return { ...data, id: existing.id };
+      } else {
+          try {
+            return (await this.insert('organization_settings', { ...data, id: generateId() }))!;
+          } catch (e: any) {
+              console.error("Save Settings Failed:", e);
+              throw e;
+          }
+      }
   }
 
   // --- Plants ---

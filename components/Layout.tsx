@@ -1,8 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { NAV_ITEMS, getPageTitle } from '../constants';
 import type { NavItem } from '../constants';
 import { ViewState } from '../types';
-import { LayoutDashboard, ChevronDown, ChevronRight, Menu, X } from 'lucide-react';
+import { LayoutDashboard, ChevronDown, ChevronRight, Menu, X, LogOut, Loader2 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface LayoutProps {
   currentView: ViewState;
@@ -11,6 +14,9 @@ interface LayoutProps {
 }
 
 export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, children }) => {
+  const { user, logout, hasPermission } = useAuth();
+  const { settings } = useSettings();
+  
   // State to track expanded groups.
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   // State to track mobile menu visibility
@@ -45,8 +51,18 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
   };
 
   const renderNavItem = (item: NavItem, depth = 0) => {
+    // Permission Check
+    if (!hasPermission(item.id)) return null;
+
     const isActive = currentView === item.id;
     const hasChildren = item.children && item.children.length > 0;
+    
+    // Check if children have permissions. If a group has children but user has no permission for any child, hide group.
+    if (hasChildren) {
+        const visibleChildren = item.children?.filter(child => hasPermission(child.id));
+        if (!visibleChildren || visibleChildren.length === 0) return null;
+    }
+
     const isExpanded = expandedGroups.includes(item.id);
     const isChildActive = hasChildren && item.children?.some(c => c.id === currentView);
 
@@ -91,34 +107,56 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
     );
   };
 
+  const appLogo = settings?.companyLogo ? (
+      <img src={settings.companyLogo} alt="Logo" className="w-10 h-10 object-contain rounded-lg bg-white p-0.5" />
+  ) : (
+      <div className="p-2 bg-primary-600 rounded-lg text-white">
+        <LayoutDashboard size={24} />
+      </div>
+  );
+
+  const appName = settings?.companyName || 'Factori';
+
   return (
     <div className="min-h-screen flex bg-slate-50 dark:bg-slate-900">
       {/* Desktop Sidebar */}
       <aside className="w-64 bg-slate-900 text-slate-300 flex-shrink-0 hidden md:flex flex-col transition-all duration-300 h-screen sticky top-0 border-r border-slate-800">
-        <div className="p-6 border-b border-slate-800 flex items-center space-x-3 flex-shrink-0">
-          <div className="p-2 bg-primary-600 rounded-lg text-white">
-            <LayoutDashboard size={24} />
-          </div>
-          <span className="text-xl font-bold text-white tracking-tight">Factori</span>
+        {/* Logo and Name Container - Flex Row to ensure "Beside" layout */}
+        <div className="p-6 border-b border-slate-800 flex items-center gap-3 flex-shrink-0">
+          {appLogo}
+          <span className="text-lg font-bold text-white tracking-tight truncate leading-tight" title={appName}>
+            {appName}
+          </span>
         </div>
 
         <nav className="flex-1 overflow-y-auto p-4 custom-scrollbar">
           {NAV_ITEMS.map(item => renderNavItem(item))}
         </nav>
         
-        <div className="p-6 border-t border-slate-800 flex-shrink-0 bg-slate-900">
-          <p className="text-xs text-slate-500">Factori v1.1.0</p>
-          <p className="text-xs text-slate-600 mt-1">Production System</p>
+        <div className="p-4 border-t border-slate-800 flex-shrink-0 bg-slate-900">
+          <div className="flex items-center justify-between mb-2">
+             <div className="text-xs overflow-hidden">
+                <p className="text-white font-bold truncate">{user?.name}</p>
+                <p className="text-slate-500 capitalize">{user?.role}</p>
+             </div>
+             <button onClick={logout} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg" title="Logout">
+                <LogOut size={16} />
+             </button>
+          </div>
         </div>
       </aside>
 
       {/* Mobile Header (Visible on small screens) */}
       <div className="md:hidden fixed top-0 w-full bg-slate-900 z-50 p-4 flex justify-between items-center text-white shadow-md">
-         <div className="flex items-center space-x-2">
-           <div className="p-1.5 bg-primary-600 rounded">
-             <LayoutDashboard size={18} />
-           </div>
-           <span className="font-bold text-lg">Factori</span>
+         <div className="flex items-center gap-3">
+           {settings?.companyLogo ? (
+             <img src={settings.companyLogo} alt="Logo" className="w-8 h-8 object-contain rounded bg-white p-0.5" />
+           ) : (
+             <div className="p-1.5 bg-primary-600 rounded">
+               <LayoutDashboard size={18} />
+             </div>
+           )}
+           <span className="font-bold text-lg truncate">{appName}</span>
          </div>
          <button 
            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -140,11 +178,9 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
           {/* Sidebar Content */}
           <aside className="fixed inset-y-0 left-0 w-64 bg-slate-900 text-slate-300 flex flex-col shadow-2xl z-50 animate-in slide-in-from-left duration-200">
              <div className="p-6 border-b border-slate-800 flex items-center justify-between flex-shrink-0">
-               <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-primary-600 rounded-lg text-white">
-                    <LayoutDashboard size={24} />
-                  </div>
-                  <span className="text-xl font-bold text-white tracking-tight">Factori</span>
+               <div className="flex items-center gap-3">
+                  {appLogo}
+                  <span className="text-lg font-bold text-white tracking-tight truncate">{appName}</span>
                </div>
                <button onClick={() => setIsMobileMenuOpen(false)} className="text-slate-400 hover:text-white">
                  <X size={20} />
@@ -155,9 +191,14 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
                 {NAV_ITEMS.map(item => renderNavItem(item))}
              </nav>
 
-             <div className="p-6 border-t border-slate-800 flex-shrink-0 bg-slate-900">
-               <p className="text-xs text-slate-500">Factori v1.1.0</p>
-               <p className="text-xs text-slate-600 mt-1">Mobile Access</p>
+             <div className="p-4 border-t border-slate-800 flex-shrink-0 bg-slate-900 flex justify-between items-center">
+               <div className="text-xs">
+                <p className="text-white font-bold">{user?.name}</p>
+                <p className="text-slate-500 capitalize">{user?.role}</p>
+               </div>
+               <button onClick={logout} className="text-slate-400">
+                   <LogOut size={16} />
+               </button>
              </div>
           </aside>
         </div>

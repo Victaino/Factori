@@ -6,7 +6,7 @@ import { ShoppingBag, Plus, Trash2, Calendar, Truck, Pencil, Search, X } from 'l
 import { useSettings } from '../contexts/SettingsContext';
 
 export const PurchaseOrderManager: React.FC = () => {
-  const { formatCurrency } = useSettings();
+  const { formatCurrency, settings } = useSettings();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [taxes, setTaxes] = useState<Tax[]>([]);
@@ -26,7 +26,7 @@ export const PurchaseOrderManager: React.FC = () => {
     orderDate: new Date().toISOString().split('T')[0],
     expectedDeliveryDate: '',
     receivedDate: '',
-    taxRate: 0,
+    taxRate: settings?.taxRate || 0,
     taxAmount: 0,
     totalAmount: 0,
     status: 'Pending' as 'Pending' | 'Received' | 'Cancelled'
@@ -41,13 +41,20 @@ export const PurchaseOrderManager: React.FC = () => {
     fetchData();
   }, []);
 
+  // Update default tax if settings load late
+  useEffect(() => {
+      if (!editingId && settings?.taxRate) {
+          setFormData(prev => ({ ...prev, taxRate: settings.taxRate }));
+      }
+  }, [settings, editingId]);
+
   const resetForm = () => {
     setFormData({
       supplierId: '',
       orderDate: new Date().toISOString().split('T')[0],
       expectedDeliveryDate: '',
       receivedDate: '',
-      taxRate: 0,
+      taxRate: settings?.taxRate || 0,
       taxAmount: 0,
       totalAmount: 0,
       status: 'Pending'
@@ -347,6 +354,12 @@ export const PurchaseOrderManager: React.FC = () => {
                     onChange={e => handleTaxChange(parseFloat(e.target.value))}
                 >
                     <option value={0}>No Tax (0%)</option>
+                    {/* Organization Default */}
+                    {settings?.taxRate && (
+                        <option value={settings.taxRate}>
+                            {settings.taxName || 'Org Default'} ({settings.taxRate}%)
+                        </option>
+                    )}
                     {taxes.map(t => (
                         <option key={t.id} value={t.rate}>{t.name} ({t.rate}%)</option>
                     ))}

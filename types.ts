@@ -173,6 +173,41 @@ export interface Payroll {
   date: string; // Payment date
 }
 
+// --- Auth Types ---
+
+export type UserRole = string; // Dynamic roles now
+
+export interface Role {
+  id: string;
+  name: string;
+  description: string;
+  permissions: string[]; // Array of ViewStates
+}
+
+export interface User {
+  id: string;
+  username: string;
+  password?: string; // Only used for updates, not exposed usually
+  name: string;
+  role: UserRole;
+  lastLogin?: string;
+}
+
+// --- Global Settings ---
+
+export interface OrganizationSettings {
+  id: string;
+  companyName: string;
+  companyAddress: string;
+  companyTin: string;
+  companyLogo: string;
+  taxName: string; // e.g. VAT
+  taxRate: number; // e.g. 7.5
+  baseCurrency: string;
+  defaultTheme: string;
+  defaultColorTheme: string;
+}
+
 // Navigation Types
 export type ViewState = 
   | 'DASHBOARD' 
@@ -195,4 +230,6 @@ export type ViewState =
   | 'PAYROLL'
   | 'DEDUCTIONS'
   | 'PROFIT_LOSS'
-  | 'SETTINGS';
+  | 'SETTINGS'
+  | 'USERS'
+  | 'ROLES'; // New view for role management

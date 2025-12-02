@@ -6,7 +6,7 @@ import { Plus, Trash2, Wallet, Pencil, Search, X, Calendar } from 'lucide-react'
 import { useSettings } from '../contexts/SettingsContext';
 
 export const ExpenseManager: React.FC = () => {
-  const { formatCurrency } = useSettings();
+  const { formatCurrency, settings } = useSettings();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -21,6 +21,9 @@ export const ExpenseManager: React.FC = () => {
     items: '',
     quantity: 0,
     price: 0,
+    taxRate: settings?.taxRate || 0,
+    taxAmount: 0,
+    amount: 0,
     paid: 0,
     date: new Date().toISOString().split('T')[0]
   });
@@ -34,16 +37,32 @@ export const ExpenseManager: React.FC = () => {
     refreshData();
   }, []);
 
+  // Update default tax
+  useEffect(() => {
+    if (!editingId && settings?.taxRate) {
+        setFormData(prev => ({ ...prev, taxRate: settings.taxRate }));
+    }
+  }, [settings, editingId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const amount = formData.quantity * formData.price;
+    // Re-calculate one last time before submit to be safe
+    const baseAmount = formData.quantity * formData.price;
+    const taxAmt = baseAmount * (formData.taxRate / 100);
+    const amount = baseAmount + taxAmt;
     const balance = amount - formData.paid;
     
     if (editingId) {
-        await db.updateExpense(editingId, { ...formData, amount, balance });
+        await db.updateExpense(editingId, { 
+            ...formData, 
+            taxAmount: taxAmt,
+            amount, 
+            balance 
+        });
     } else {
         await db.addExpense({
             ...formData,
+            taxAmount: taxAmt,
             amount,
             balance
         });
@@ -60,6 +79,9 @@ export const ExpenseManager: React.FC = () => {
         items: '',
         quantity: 0,
         price: 0,
+        taxRate: settings?.taxRate || 0,
+        taxAmount: 0,
+        amount: 0,
         paid: 0,
         date: new Date().toISOString().split('T')[0]
       });
@@ -72,6 +94,9 @@ export const ExpenseManager: React.FC = () => {
           items: expense.items,
           quantity: expense.quantity,
           price: expense.price,
+          taxRate: expense.taxRate || 0,
+          taxAmount: expense.taxAmount || 0,
+          amount: expense.amount,
           paid: expense.paid,
           date: expense.date
       });
@@ -87,9 +112,6 @@ export const ExpenseManager: React.FC = () => {
   };
 
   const getSupplierName = (id: string) => suppliers.find(s => s.id === id)?.name || 'Unknown Supplier';
-
-  const amount = formData.quantity * formData.price;
-  const balance = amount - formData.paid;
 
   // Filter Logic
   const filteredExpenses = useMemo(() => {
@@ -109,6 +131,12 @@ export const ExpenseManager: React.FC = () => {
     setSearchTerm('');
     setFilterDate('');
   };
+  
+  // Real-time calculation helpers
+  const currentBase = formData.quantity * formData.price;
+  const currentTax = currentBase * (formData.taxRate / 100);
+  const currentTotal = currentBase + currentTax;
+  const currentBalance = currentTotal - formData.paid;
 
   return (
     <div className="space-y-6">
@@ -260,9 +288,29 @@ export const ExpenseManager: React.FC = () => {
                 </div>
               </div>
 
+              <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tax</label>
+                  <div className="flex gap-2">
+                       <input 
+                        type="number" 
+                        min="0"
+                        className="w-1/3 border rounded-lg p-2"
+                        placeholder="Rate %"
+                        value={formData.taxRate} 
+                        onChange={e => setFormData({...formData, taxRate: parseFloat(e.target.value)})} 
+                       />
+                       <span className="self-center text-sm text-gray-500">
+                           {settings?.taxName ? `${settings.taxName} (${formData.taxRate}%)` : 'Tax %'}
+                       </span>
+                  </div>
+              </div>
+
               <div className="bg-gray-50 p-3 rounded-lg border flex justify-between items-center">
                 <span className="text-sm font-medium text-gray-600">Total Amount:</span>
-                <span className="text-lg font-bold text-gray-800">{formatCurrency(amount)}</span>
+                <div className="text-right">
+                    <span className="block text-lg font-bold text-gray-800">{formatCurrency(currentTotal)}</span>
+                    {currentTax > 0 && <span className="block text-xs text-gray-500">Includes {formatCurrency(currentTax)} tax</span>}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -274,7 +322,7 @@ export const ExpenseManager: React.FC = () => {
                 <div>
                    <label className="block text-sm font-medium text-gray-700 mb-1">Balance Due</label>
                    <div className="w-full border rounded-lg p-2 bg-gray-100 text-gray-600">
-                     {formatCurrency(balance)}
+                     {formatCurrency(currentBalance)}
                    </div>
                 </div>
               </div>
