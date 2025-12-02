@@ -6,17 +6,17 @@ import {
 import { db } from '../services/db';
 import { 
   Factory, AlertTriangle, DollarSign, AlertCircle, CheckCircle, Loader2, 
-  ShoppingBag, ShoppingCart, TrendingUp, Wallet, Filter, Calendar
+  ShoppingBag, ShoppingCart, TrendingUp, Wallet, Filter, Calendar, TrendingDown, Banknote
 } from 'lucide-react';
 import { 
   Production, IncidentReport, Material, Product, InventoryItem, 
-  Sale, Expense, PurchaseOrder, SalesOrder 
+  Sale, Expense, PurchaseOrder, SalesOrder, Payroll
 } from '../types';
 import { useSettings } from '../contexts/SettingsContext';
 
 const Card: React.FC<{ title: string; value: string | number; icon: React.ReactNode; color: string }> = ({ title, value, icon, color }) => (
-  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4 dark:bg-slate-800 dark:border-slate-700 hover:shadow-md transition-shadow">
-    <div className={`p-4 rounded-full ${color} text-white`}>
+  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4 dark:bg-slate-800 dark:border-slate-700 hover:shadow-md transition-shadow animate-fade-in">
+    <div className={`p-4 rounded-full ${color} text-white shadow-sm`}>
       {icon}
     </div>
     <div>
@@ -29,7 +29,7 @@ const Card: React.FC<{ title: string; value: string | number; icon: React.ReactN
 type DateFilter = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR';
 
 export const Dashboard: React.FC = () => {
-  const { formatCurrency } = useSettings();
+  const { formatCurrency, settings } = useSettings();
   
   // Data State
   const [production, setProduction] = useState<Production[]>([]);
@@ -39,6 +39,7 @@ export const Dashboard: React.FC = () => {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [payroll, setPayroll] = useState<Payroll[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
   
@@ -47,7 +48,7 @@ export const Dashboard: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      const [p, i, m, prod, inv, s, e, po, so] = await Promise.all([
+      const [p, i, m, prod, inv, s, e, pay, po, so] = await Promise.all([
         db.getProduction(),
         db.getIncidents(),
         db.getMaterials(),
@@ -55,6 +56,7 @@ export const Dashboard: React.FC = () => {
         db.getInventory(),
         db.getSales(),
         db.getExpenses(),
+        db.getPayroll(),
         db.getPurchaseOrders(),
         db.getSalesOrders()
       ]);
@@ -69,6 +71,7 @@ export const Dashboard: React.FC = () => {
       
       setSales(s);
       setExpenses(e);
+      setPayroll(pay);
       setPurchaseOrders(po);
       setSalesOrders(so);
       
@@ -102,243 +105,209 @@ export const Dashboard: React.FC = () => {
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       return date >= startOfMonth;
     }
-    
+
     if (dateFilter === 'QUARTER') {
-      const currentQuarter = Math.floor(now.getMonth() / 3);
-      const startOfQuarter = new Date(now.getFullYear(), currentQuarter * 3, 1);
-      return date >= startOfQuarter;
+        const currQuarter = Math.floor(now.getMonth() / 3);
+        const startOfQuarter = new Date(now.getFullYear(), currQuarter * 3, 1);
+        return date >= startOfQuarter;
     }
-    
+
     if (dateFilter === 'YEAR') {
-      const startOfYear = new Date(now.getFullYear(), 0, 1);
-      return date >= startOfYear;
+        const startOfYear = new Date(now.getFullYear(), 0, 1);
+        return date >= startOfYear;
     }
-    
+
     return true;
   };
 
-  // Filtered Data
-  const filteredProduction = useMemo(() => production.filter(i => isDateInFilter(i.date)), [production, dateFilter]);
-  const filteredSales = useMemo(() => sales.filter(i => isDateInFilter(i.date)), [sales, dateFilter]);
-  const filteredExpenses = useMemo(() => expenses.filter(i => isDateInFilter(i.date)), [expenses, dateFilter]);
-  const filteredPurchaseOrders = useMemo(() => purchaseOrders.filter(i => isDateInFilter(i.orderDate)), [purchaseOrders, dateFilter]);
-  const filteredSalesOrders = useMemo(() => salesOrders.filter(i => isDateInFilter(i.orderDate)), [salesOrders, dateFilter]);
-  
-  // Note: Inventory and Materials are usually snapshots of *current* state, so we generally don't filter them by transaction date unless we track history.
-  // We will display current values for these.
+  // Calculations
+  const filteredProduction = useMemo(() => production.filter(p => isDateInFilter(p.date)), [production, dateFilter]);
+  const filteredSales = useMemo(() => sales.filter(s => isDateInFilter(s.date)), [sales, dateFilter]);
+  const filteredExpenses = useMemo(() => expenses.filter(e => isDateInFilter(e.date)), [expenses, dateFilter]);
+  const filteredPayroll = useMemo(() => payroll.filter(p => isDateInFilter(p.date)), [payroll, dateFilter]);
 
-  // KPI Calculations
-  const totalProduction = filteredProduction.reduce((acc, curr) => acc + curr.outputTonnage, 0).toFixed(1);
+  const totalProduction = filteredProduction.reduce((acc, curr) => acc + curr.outputTonnage, 0);
   const totalSales = filteredSales.reduce((acc, curr) => acc + curr.amount, 0);
   const totalPurchases = filteredExpenses.reduce((acc, curr) => acc + curr.amount, 0);
-  const totalSalesOrders = filteredSalesOrders.reduce((acc, curr) => acc + curr.totalAmount, 0);
-  const totalPurchaseOrders = filteredPurchaseOrders.reduce((acc, curr) => acc + curr.totalAmount, 0);
+  const totalPayroll = filteredPayroll.reduce((acc, curr) => acc + curr.amountPayable, 0);
   
-  // Snapshot Calculations
-  const materialValue = useMemo(() => materials.reduce((acc, curr) => acc + curr.amount, 0), [materials]);
-  const productValue = useMemo(() => inventory.reduce((acc, curr) => acc + (curr.quantity * curr.price), 0), [inventory]);
+  const totalExpenses = totalPurchases + totalPayroll;
+  const netProfit = totalSales - totalExpenses;
   
-  const incidentCount = incidents.length; // Active incidents usually just count total active
+  const lowStockCount = inventory.filter(i => i.lowStockThreshold !== undefined && i.quantity <= i.lowStockThreshold).length;
+  const totalInventoryValue = inventory.reduce((acc, curr) => acc + (curr.quantity * curr.price), 0);
 
-  const lowStockItems = useMemo(() => {
-    return inventory.filter(i => i.lowStockThreshold !== undefined && i.quantity <= i.lowStockThreshold);
-  }, [inventory]);
+  // Chart Data Preparation
+  const chartData = [
+      { name: 'Sales', amount: totalSales },
+      { name: 'Purchases', amount: totalPurchases },
+      { name: 'Payroll', amount: totalPayroll }
+  ];
 
-  // Chart Data: Production Trend (Filtered)
-  const lineChartData = useMemo(() => {
-    const grouped: Record<string, number> = {};
-    filteredProduction.forEach(p => {
-      grouped[p.date] = (grouped[p.date] || 0) + p.outputTonnage;
-    });
-    return Object.keys(grouped).sort().map(date => ({ date, output: grouped[date] }));
-  }, [filteredProduction]);
-
-  // Chart Data: Inventory Value by Product (Snapshot)
-  const barChartData = useMemo(() => {
-    return products.map(p => {
-       // Find inventory for this product
-       const invItem = inventory.find(i => i.productId === p.id);
-       const value = invItem ? invItem.quantity * invItem.price : 0;
-       return {
-         name: p.name,
-         value: value
-       };
-    }).sort((a,b) => b.value - a.value).slice(0, 10); // Top 10 products
-  }, [products, inventory]);
+  // Default to showing everything if settings aren't loaded or config is missing
+  const config = settings?.dashboardConfig || {
+    showProductionOutput: true,
+    showInventoryValue: true,
+    showLowStockAlert: true,
+    showIncidents: true,
+    showTotalSales: true,
+    showPurchases: true,
+    showPayrollCost: true,
+    showNetProfit: true
+  };
 
   if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="animate-spin text-blue-600" size={32} />
-      </div>
-    );
+      return (
+          <div className="flex h-[50vh] items-center justify-center">
+              <Loader2 className="animate-spin text-blue-600" size={48} />
+          </div>
+      );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-fade-in">
       
       {/* Filter Toolbar */}
-      <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100 dark:bg-slate-800 dark:border-slate-700">
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-white mb-4 sm:mb-0 flex items-center gap-2">
-           <Filter size={20} className="text-blue-600" /> Dashboard Overview
-        </h2>
-        <div className="flex space-x-2 overflow-x-auto w-full sm:w-auto pb-2 sm:pb-0">
-          {(['ALL', 'TODAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR'] as DateFilter[]).map((filter) => (
-            <button
-              key={filter}
-              onClick={() => setDateFilter(filter)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                dateFilter === filter 
-                  ? 'bg-blue-600 text-white shadow-md' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300'
-              }`}
-            >
-              {filter === 'ALL' ? 'All Time' : filter.charAt(0) + filter.slice(1).toLowerCase()}
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100 gap-4">
+          <div className="flex items-center gap-2 text-gray-600">
+              <Filter size={20} />
+              <span className="font-medium">Filter Dashboard Data:</span>
+          </div>
+          <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
+              {(['ALL', 'TODAY', 'WEEK', 'MONTH', 'YEAR'] as DateFilter[]).map(filter => (
+                  <button
+                    key={filter}
+                    onClick={() => setDateFilter(filter)}
+                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                        dateFilter === filter ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                      {filter}
+                  </button>
+              ))}
+          </div>
       </div>
 
-      {/* Financial & Order KPIs */}
+      {/* KPI Grid - Operational */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card 
-          title="Total Sales" 
-          value={formatCurrency(totalSales)} 
-          icon={<TrendingUp size={24} />} 
-          color="bg-green-600" 
-        />
-        <Card 
-          title="Total Purchases" 
-          value={formatCurrency(totalPurchases)} 
-          icon={<Wallet size={24} />} 
-          color="bg-purple-600" 
-        />
-        <Card 
-          title="Sales Orders" 
-          value={formatCurrency(totalSalesOrders)} 
-          icon={<ShoppingCart size={24} />} 
-          color="bg-blue-500" 
-        />
-        <Card 
-          title="Purchase Orders" 
-          value={formatCurrency(totalPurchaseOrders)} 
-          icon={<ShoppingBag size={24} />} 
-          color="bg-emerald-600" 
-        />
-      </div>
-
-      {/* Operational KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card 
-          title="Production Output" 
-          value={`${totalProduction} Tons`} 
-          icon={<Factory size={24} />} 
-          color="bg-indigo-600" 
-        />
-         <Card 
-          title="Product Value" 
-          value={formatCurrency(productValue)} 
-          icon={<CheckCircle size={24} />} 
-          color="bg-teal-600" 
-        />
-         <Card 
-          title="Material Value" 
-          value={formatCurrency(materialValue)} 
-          icon={<DollarSign size={24} />} 
-          color="bg-cyan-600" 
-        />
-        {lowStockItems.length > 0 ? (
-          <Card 
+        {config.showProductionOutput && (
+            <Card 
+            title="Production Output" 
+            value={`${totalProduction.toFixed(1)} Tons`} 
+            icon={<Factory size={24} />} 
+            color="bg-blue-500" 
+            />
+        )}
+        {config.showInventoryValue && (
+            <Card 
+            title="Inventory Value" 
+            value={formatCurrency(totalInventoryValue)} 
+            icon={<ShoppingBag size={24} />} 
+            color="bg-purple-500" 
+            />
+        )}
+        {config.showLowStockAlert && (
+            <Card 
             title="Low Stock Alerts" 
-            value={lowStockItems.length} 
-            icon={<AlertCircle size={24} />} 
-            color="bg-orange-500" 
-          />
-        ) : (
-          <Card 
-            title="Active Incidents" 
-            value={incidentCount} 
+            value={lowStockCount} 
             icon={<AlertTriangle size={24} />} 
-            color="bg-red-500" 
-          />
+            color={lowStockCount > 0 ? "bg-red-500" : "bg-green-500"} 
+            />
+        )}
+        {config.showIncidents && (
+            <Card 
+            title="Incidents" 
+            value={incidents.length} 
+            icon={<AlertCircle size={24} />} 
+            color={incidents.length > 0 ? "bg-orange-500" : "bg-green-500"} 
+            />
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Line Chart: Production Trend */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col dark:bg-slate-800 dark:border-slate-700">
-          <h3 className="text-lg font-bold text-gray-800 mb-4 dark:text-white flex justify-between">
-            <span>Production Output Trend</span>
-            <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-1 rounded dark:bg-slate-700 dark:text-gray-300">
-              {dateFilter === 'ALL' ? 'All Time' : `This ${dateFilter.toLowerCase()}`}
-            </span>
-          </h3>
-          <div className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={lineChartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 12}} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 12}} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  itemStyle={{ color: '#1f2937' }}
-                />
-                <Legend />
-                <Line type="monotone" dataKey="output" name="Output (Tons)" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+      {/* Financial KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {config.showTotalSales && (
+              <Card 
+                title="Total Sales" 
+                value={formatCurrency(totalSales)} 
+                icon={<TrendingUp size={24} />} 
+                color="bg-emerald-500" 
+              />
+          )}
+          {config.showPurchases && (
+              <Card 
+                title="Total Purchases" 
+                value={formatCurrency(totalPurchases)} 
+                icon={<ShoppingCart size={24} />} 
+                color="bg-indigo-500" 
+              />
+          )}
+          {config.showPayrollCost && (
+              <Card 
+                title="Payroll Cost" 
+                value={formatCurrency(totalPayroll)} 
+                icon={<Banknote size={24} />} 
+                color="bg-pink-500" 
+              />
+          )}
+          
+          {config.showNetProfit && (
+              <div className={`bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4 dark:bg-slate-800 dark:border-slate-700 hover:shadow-md transition-shadow animate-fade-in ${netProfit >= 0 ? 'border-b-4 border-b-green-500' : 'border-b-4 border-b-red-500'}`}>
+                <div className={`p-4 rounded-full text-white shadow-sm ${netProfit >= 0 ? 'bg-green-600' : 'bg-red-600'}`}>
+                {netProfit >= 0 ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
+                </div>
+                <div>
+                    <p className="text-sm text-gray-500 font-medium dark:text-gray-400">Net Profit / Loss</p>
+                    <h3 className={`text-2xl font-bold ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(netProfit)}
+                    </h3>
+                </div>
+              </div>
+          )}
+      </div>
 
-        {/* Bar Chart: Inventory Value */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col dark:bg-slate-800 dark:border-slate-700">
-          <h3 className="text-lg font-bold text-gray-800 mb-4 dark:text-white">Top Products by Value</h3>
-          <div className="h-80 w-full">
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 dark:bg-slate-800 dark:border-slate-700">
+          <h3 className="text-lg font-bold text-gray-800 mb-6 dark:text-white">Financial Overview</h3>
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barChartData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
-                <XAxis type="number" axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 10}} />
-                <YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 11}} />
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                <YAxis axisLine={false} tickLine={false} />
                 <Tooltip 
-                   cursor={{ fill: '#f3f4f6' }}
-                   contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                   formatter={(value: any) => formatCurrency(value)}
+                    cursor={{fill: 'transparent'}}
+                    formatter={(value: number) => formatCurrency(value)}
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 />
-                <Bar dataKey="value" name="Value" fill="#0d9488" radius={[0, 4, 4, 0]} barSize={20} />
+                <Bar dataKey="amount" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                    {chartData.map((entry, index) => (
+                        <cell key={`cell-${index}`} fill={['#10b981', '#6366f1', '#ec4899'][index]} />
+                    ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
-      </div>
-      
-      {/* Recent Incidents Quick View */}
-      {incidents.length > 0 && (
+
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 dark:bg-slate-800 dark:border-slate-700">
-           <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 dark:text-white">
-             <AlertTriangle className="text-red-500" size={20} /> Recent Incidents
-           </h3>
-           <div className="overflow-x-auto">
-             <table className="w-full text-left text-sm">
-               <thead className="bg-red-50 text-red-800">
-                 <tr>
-                   <th className="p-3 rounded-l-lg">Date</th>
-                   <th className="p-3">Description</th>
-                   <th className="p-3 rounded-r-lg">Resolution</th>
-                 </tr>
-               </thead>
-               <tbody className="divide-y dark:divide-slate-700">
-                 {incidents.slice(0, 5).map(inc => (
-                   <tr key={inc.id}>
-                     <td className="p-3 text-gray-600 dark:text-gray-300">{inc.date}</td>
-                     <td className="p-3 font-medium text-gray-800 dark:text-white">{inc.description}</td>
-                     <td className="p-3 text-gray-600 dark:text-gray-300">{inc.remark}</td>
-                   </tr>
-                 ))}
-               </tbody>
-             </table>
-           </div>
+          <h3 className="text-lg font-bold text-gray-800 mb-6 dark:text-white">Recent Production Trend</h3>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={production.slice(0, 10).reverse()}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="date" axisLine={false} tickLine={false} />
+                <YAxis axisLine={false} tickLine={false} />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="outputTonnage" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} name="Output (Tons)" />
+                <Line type="monotone" dataKey="inputTonnage" stroke="#94a3b8" strokeWidth={2} dot={{r: 4}} name="Input (Tons)" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

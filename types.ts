@@ -195,6 +195,17 @@ export interface User {
 
 // --- Global Settings ---
 
+export interface DashboardConfig {
+  showProductionOutput: boolean;
+  showInventoryValue: boolean;
+  showLowStockAlert: boolean;
+  showIncidents: boolean;
+  showTotalSales: boolean;
+  showPurchases: boolean;
+  showPayrollCost: boolean;
+  showNetProfit: boolean;
+}
+
 export interface OrganizationSettings {
   id: string;
   companyName: string;
@@ -206,6 +217,7 @@ export interface OrganizationSettings {
   baseCurrency: string;
   defaultTheme: string;
   defaultColorTheme: string;
+  dashboardConfig?: DashboardConfig;
 }
 
 // Navigation Types

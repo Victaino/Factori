@@ -366,4 +366,14 @@ export const ProductionManager: React.FC = () => {
               </div>
 
               <div className="pt-6">
-                <button type="submit" className="w-full bg-blue-600 text-white py-
+                <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700">
+                  {editingId ? 'Update Record' : 'Save Record'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

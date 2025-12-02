@@ -10,15 +10,15 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 
 export const STORAGE_FIX_SQL = `
 -- Run this in Supabase SQL Editor to fix Storage permissions
+-- 1. Create the bucket (Safe to run even if it exists)
 insert into storage.buckets (id, name, public)
 values ('organization-assets', 'organization-assets', true)
 on conflict (id) do nothing;
 
-alter table storage.objects enable row level security;
-
-drop policy if exists "Public Access" on storage.objects;
-
-create policy "Public Access"
+-- 2. Create the Access Policy
+-- We use a unique name to avoid conflicts if you run this multiple times.
+-- If you get a "policy already exists" error, that is fine/success.
+create policy "Organization Assets Public Access 2"
 on storage.objects for all
 using ( bucket_id = 'organization-assets' )
 with check ( bucket_id = 'organization-assets' );
