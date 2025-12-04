@@ -368,29 +368,33 @@ class DatabaseService {
     
     // AUTOMATION: Update Stocks
     if (production) {
-        // 1. Consume Material (Reduce Stock)
-        const materials = await this.getMaterials();
-        const material = materials.find(m => m.id === data.materialId);
-        if (material) {
-            const newQty = Math.max(0, material.quantity - data.inputTonnage);
+      // 1. Consume Materials (Reduce Stock)
+      if (production.materialsUsed && production.materialsUsed.length > 0) {
+        const materials = await this.getMaterials(); // Fetch all materials once
+        for (const matUsed of production.materialsUsed) {
+          const material = materials.find(m => m.id === matUsed.materialId);
+          if (material) {
+            const newQty = Math.max(0, material.quantity - matUsed.inputTonnage);
             await this.updateMaterial(material.id, { quantity: newQty });
+          }
         }
+      }
 
-        // 2. Increase Inventory Product (Add Stock)
-        const inventory = await this.getInventory();
-        const invItem = inventory.find(i => i.productId === data.productId);
-        if (invItem) {
-            await this.updateInventory(invItem.id, { quantity: invItem.quantity + data.outputTonnage });
-        } else {
-             // Fallback: If inventory item missing for some reason
-             await this.insert('inventory', {
-                id: generateId(),
-                productId: data.productId,
-                quantity: data.outputTonnage,
-                price: 0, 
-                lowStockThreshold: 10
-            });
-        }
+      // 2. Increase Inventory Product (Add Stock)
+      const inventory = await this.getInventory();
+      const invItem = inventory.find(i => i.productId === data.productId);
+      if (invItem) {
+          await this.updateInventory(invItem.id, { quantity: invItem.quantity + data.outputTonnage });
+      } else {
+            // Fallback: If inventory item missing for some reason
+            await this.insert('inventory', {
+              id: generateId(),
+              productId: data.productId,
+              quantity: data.outputTonnage,
+              price: 0, 
+              lowStockThreshold: 10
+          });
+      }
     }
     return production;
   }

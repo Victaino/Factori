@@ -143,6 +143,14 @@ export const Dashboard: React.FC = () => {
       { name: 'Purchases', amount: totalPurchases },
       { name: 'Payroll', amount: totalPayroll }
   ];
+  
+  const productionChartData = useMemo(() => {
+    return production.slice(-10).map(p => ({
+      ...p,
+      totalInputTonnage: p.materialsUsed?.reduce((sum, mat) => sum + mat.inputTonnage, 0) || 0
+    })).reverse();
+  }, [production]);
+
 
   // Default to showing everything if settings aren't loaded or config is missing
   const config = settings?.dashboardConfig || {
@@ -295,14 +303,14 @@ export const Dashboard: React.FC = () => {
           <h3 className="text-lg font-bold text-gray-800 mb-6 dark:text-white">Recent Production Trend</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={production.slice(0, 10).reverse()}>
+              <LineChart data={productionChartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="date" axisLine={false} tickLine={false} />
                 <YAxis axisLine={false} tickLine={false} />
                 <Tooltip />
                 <Legend />
                 <Line type="monotone" dataKey="outputTonnage" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} name="Output (Tons)" />
-                <Line type="monotone" dataKey="inputTonnage" stroke="#94a3b8" strokeWidth={2} dot={{r: 4}} name="Input (Tons)" />
+                <Line type="monotone" dataKey="totalInputTonnage" stroke="#94a3b8" strokeWidth={2} dot={{r: 4}} name="Input (Tons)" />
               </LineChart>
             </ResponsiveContainer>
           </div>

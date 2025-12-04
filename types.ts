@@ -18,7 +18,7 @@ export interface Material {
 }
 
 export interface Product {
-  id: string;
+  id:string;
   name: string;
   price: number;
   quantity: number;
@@ -40,8 +40,7 @@ export interface Production {
   productId: string; // FK
   plantId: string; // FK
   operatorId: string; // FK
-  materialId: string; // FK
-  inputTonnage: number;
+  materialsUsed: { materialId: string; inputTonnage: number }[]; // Replaces materialId and inputTonnage
   outputTonnage: number;
   timeStart: string; // HH:mm
   timeStop: string; // HH:mm

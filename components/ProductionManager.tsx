@@ -25,8 +25,7 @@ export const ProductionManager: React.FC = () => {
     productId: '',
     plantId: '',
     operatorId: '',
-    materialId: '',
-    inputTonnage: 0,
+    materialsUsed: [{ materialId: '', inputTonnage: 0 }],
     outputTonnage: 0,
     timeStart: '08:00',
     timeStop: '17:00',
@@ -81,8 +80,7 @@ export const ProductionManager: React.FC = () => {
         productId: '',
         plantId: '',
         operatorId: '',
-        materialId: '',
-        inputTonnage: 0,
+        materialsUsed: [{ materialId: '', inputTonnage: 0 }],
         outputTonnage: 0,
         timeStart: '08:00',
         timeStop: '17:00',
@@ -97,8 +95,9 @@ export const ProductionManager: React.FC = () => {
           productId: prod.productId,
           plantId: prod.plantId,
           operatorId: prod.operatorId,
-          materialId: prod.materialId,
-          inputTonnage: prod.inputTonnage,
+          materialsUsed: Array.isArray(prod.materialsUsed) && prod.materialsUsed.length > 0
+            ? prod.materialsUsed
+            : [{ materialId: '', inputTonnage: 0 }],
           outputTonnage: prod.outputTonnage,
           timeStart: prod.timeStart,
           timeStop: prod.timeStop,
@@ -115,6 +114,33 @@ export const ProductionManager: React.FC = () => {
     }
   };
 
+  // --- Dynamic Form Handlers for Materials ---
+  const handleMaterialChange = (index: number, field: 'materialId' | 'inputTonnage', value: string | number) => {
+    const updatedMaterials = [...formData.materialsUsed];
+    const material = updatedMaterials[index];
+
+    if (field === 'materialId') {
+      material.materialId = value as string;
+    } else if (field === 'inputTonnage') {
+      material.inputTonnage = parseFloat(value as string) || 0;
+    }
+    
+    setFormData(prev => ({ ...prev, materialsUsed: updatedMaterials }));
+  };
+
+  const addMaterialRow = () => {
+    setFormData(prev => ({
+      ...prev,
+      materialsUsed: [...prev.materialsUsed, { materialId: '', inputTonnage: 0 }]
+    }));
+  };
+
+  const removeMaterialRow = (index: number) => {
+    if (formData.materialsUsed.length <= 1) return; // Must have at least one
+    const updatedMaterials = formData.materialsUsed.filter((_, i) => i !== index);
+    setFormData(prev => ({ ...prev, materialsUsed: updatedMaterials }));
+  };
+
   const getEntityName = (list: any[], id: string) => list.find(i => i.id === id)?.name || 'Unknown';
 
   // Filter Logic
@@ -123,7 +149,7 @@ export const ProductionManager: React.FC = () => {
       const plantName = getEntityName(plants, item.plantId).toLowerCase();
       const productName = getEntityName(products, item.productId).toLowerCase();
       const operatorName = getEntityName(operators, item.operatorId).toLowerCase();
-      const materialName = getEntityName(materials, item.materialId).toLowerCase();
+      const materialNames = (item.materialsUsed || []).map(m => getEntityName(materials, m.materialId).toLowerCase()).join(' ');
       const notes = (item.notes || '').toLowerCase();
       const term = searchTerm.toLowerCase();
 
@@ -131,7 +157,7 @@ export const ProductionManager: React.FC = () => {
         plantName.includes(term) || 
         productName.includes(term) || 
         operatorName.includes(term) || 
-        materialName.includes(term) ||
+        materialNames.includes(term) ||
         notes.includes(term);
 
       const matchesDate = !filterDate || item.date === filterDate;
@@ -222,7 +248,7 @@ export const ProductionManager: React.FC = () => {
                 <th className="p-4 font-semibold text-gray-600">Date</th>
                 <th className="p-4 font-semibold text-gray-600">Plant</th>
                 <th className="p-4 font-semibold text-gray-600">Operator</th>
-                <th className="p-4 font-semibold text-gray-600">Material Used</th>
+                <th className="p-4 font-semibold text-gray-600">Materials Used</th>
                 <th className="p-4 font-semibold text-gray-600">Product Output</th>
                 <th className="p-4 font-semibold text-gray-600">Duration</th>
                 <th className="p-4 font-semibold text-gray-600">Notes</th>
@@ -236,10 +262,14 @@ export const ProductionManager: React.FC = () => {
                   <td className="p-4 text-gray-600">{getEntityName(plants, item.plantId)}</td>
                   <td className="p-4 text-gray-600">{getEntityName(operators, item.operatorId)}</td>
                   <td className="p-4">
-                    <div className="flex flex-col">
-                       <span className="text-gray-800 font-medium">{getEntityName(materials, item.materialId)}</span>
-                       <span className="text-xs text-gray-500">Qty: {item.inputTonnage} Tons</span>
-                    </div>
+                    <ul className="space-y-1">
+                      {(item.materialsUsed || []).map((mat, index) => (
+                        <li key={index} className="text-xs">
+                          <span className="font-medium text-gray-800">{getEntityName(materials, mat.materialId)}:</span>
+                          <span className="text-gray-500 ml-1">{mat.inputTonnage} Tons</span>
+                        </li>
+                      ))}
+                    </ul>
                   </td>
                   <td className="p-4">
                     <div className="flex flex-col">
@@ -302,23 +332,6 @@ export const ProductionManager: React.FC = () => {
                     {operators.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Material Used</label>
-                  <select required className="w-full border rounded-lg p-2"
-                    value={formData.materialId} onChange={e => setFormData({...formData, materialId: e.target.value})}>
-                    <option value="">Select Material</option>
-                    {materials.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Input Quantity (Tons)</label>
-                  <input required type="number" step="0.1" className="w-full border rounded-lg p-2"
-                    value={formData.inputTonnage} onChange={e => setFormData({...formData, inputTonnage: parseFloat(e.target.value)})} />
-                </div>
-                
                  <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Product Produced</label>
                   <select required className="w-full border rounded-lg p-2"
@@ -327,15 +340,36 @@ export const ProductionManager: React.FC = () => {
                     {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
+              </div>
 
+              <div className="col-span-2 pt-4 border-t">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Materials Used</label>
+                <div className="space-y-2">
+                  {formData.materialsUsed.map((mat, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <select required className="flex-1 border rounded-lg p-2" value={mat.materialId} onChange={e => handleMaterialChange(index, 'materialId', e.target.value)}>
+                        <option value="">Select Material</option>
+                        {materials.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      <input required type="number" step="0.1" className="w-32 border rounded-lg p-2" placeholder="Tons" value={mat.inputTonnage} onChange={e => handleMaterialChange(index, 'inputTonnage', e.target.value)} />
+                      <button type="button" onClick={() => removeMaterialRow(index)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg" disabled={formData.materialsUsed.length <= 1}>
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" onClick={addMaterialRow} className="text-sm text-blue-600 hover:underline flex items-center gap-1 mt-2">
+                  <Plus size={16} /> Add Another Material
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Output Quantity (Tons)</label>
                   <input required type="number" step="0.1" className="w-full border rounded-lg p-2"
                     value={formData.outputTonnage} onChange={e => setFormData({...formData, outputTonnage: parseFloat(e.target.value)})} />
                 </div>
-
                 <div className="col-span-1"></div> {/* Spacer */}
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Time Start</label>
                   <input required type="time" className="w-full border rounded-lg p-2"
