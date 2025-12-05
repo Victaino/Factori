@@ -42,6 +42,7 @@ export interface Production {
   operatorId: string; // FK
   materialsUsed: { materialId: string; inputTonnage: number }[]; // Replaces materialId and inputTonnage
   outputTonnage: number;
+  outputUnit?: string; // e.g., Tons, Kg, Litres
   timeStart: string; // HH:mm
   timeStop: string; // HH:mm
   duration: number; // Minutes or Hours (derived)

@@ -126,6 +126,7 @@ export const Dashboard: React.FC = () => {
   const filteredExpenses = useMemo(() => expenses.filter(e => isDateInFilter(e.date)), [expenses, dateFilter]);
   const filteredPayroll = useMemo(() => payroll.filter(p => isDateInFilter(p.date)), [payroll, dateFilter]);
 
+  // Use generic 'Units' label since we support mixed units now
   const totalProduction = filteredProduction.reduce((acc, curr) => acc + curr.outputTonnage, 0);
   const totalSales = filteredSales.reduce((acc, curr) => acc + curr.amount, 0);
   const totalPurchases = filteredExpenses.reduce((acc, curr) => acc + curr.amount, 0);
@@ -201,7 +202,7 @@ export const Dashboard: React.FC = () => {
         {config.showProductionOutput && (
             <Card 
             title="Production Output" 
-            value={`${totalProduction.toFixed(1)} Tons`} 
+            value={`${totalProduction.toFixed(1)}`} 
             icon={<Factory size={24} />} 
             color="bg-blue-500" 
             />
@@ -309,7 +310,7 @@ export const Dashboard: React.FC = () => {
                 <YAxis axisLine={false} tickLine={false} />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="outputTonnage" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} name="Output (Tons)" />
+                <Line type="monotone" dataKey="outputTonnage" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} name="Output (Qty)" />
                 <Line type="monotone" dataKey="totalInputTonnage" stroke="#94a3b8" strokeWidth={2} dot={{r: 4}} name="Input (Tons)" />
               </LineChart>
             </ResponsiveContainer>

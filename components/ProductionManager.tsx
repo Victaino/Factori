@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { db } from '../services/db';
+import { db, PRODUCTION_FIX_SQL } from '../services/db';
 import { Production, Plant, Operator, Material, Product } from '../types';
-import { Plus, Trash2, Clock, Calendar, Pencil, Search, Filter, X } from 'lucide-react';
+import { Plus, Trash2, Clock, Calendar, Pencil, Search, Filter, X, AlertTriangle, Terminal, Copy } from 'lucide-react';
 
 export const ProductionManager: React.FC = () => {
   const [data, setData] = useState<Production[]>([]);
@@ -12,6 +12,9 @@ export const ProductionManager: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  
+  // Error State
+  const [error, setError] = useState<{message: string, sql?: string} | null>(null);
 
   // Filter State
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,6 +30,7 @@ export const ProductionManager: React.FC = () => {
     operatorId: '',
     materialsUsed: [{ materialId: '', inputTonnage: 0 }],
     outputTonnage: 0,
+    outputUnit: 'Tons', // Default
     timeStart: '08:00',
     timeStop: '17:00',
     notes: ''
@@ -64,14 +68,30 @@ export const ProductionManager: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingId) {
-        await db.updateProduction(editingId, { ...formData, duration: currentDuration });
-    } else {
-        await db.addProduction({ ...formData, duration: currentDuration });
+    setError(null);
+    
+    try {
+        if (editingId) {
+            await db.updateProduction(editingId, { ...formData, duration: currentDuration });
+        } else {
+            await db.addProduction({ ...formData, duration: currentDuration });
+        }
+        setIsModalOpen(false);
+        refreshData();
+        resetForm();
+    } catch (err: any) {
+        console.error("Operation failed:", err);
+        let msg = err.message || 'An error occurred';
+        let sql = undefined;
+
+        // Detect missing column for materialsUsed or outputUnit
+        if ((msg.includes('materialsUsed') || msg.includes('outputUnit')) && (msg.includes('column') || msg.includes('cache'))) {
+            msg = "Database Update Required: Schema fields are missing.";
+            sql = PRODUCTION_FIX_SQL;
+        }
+
+        setError({ message: msg, sql });
     }
-    setIsModalOpen(false);
-    refreshData();
-    resetForm();
   };
 
   const resetForm = () => {
@@ -82,11 +102,13 @@ export const ProductionManager: React.FC = () => {
         operatorId: '',
         materialsUsed: [{ materialId: '', inputTonnage: 0 }],
         outputTonnage: 0,
+        outputUnit: 'Tons',
         timeStart: '08:00',
         timeStop: '17:00',
         notes: ''
       });
       setEditingId(null);
+      setError(null);
   };
 
   const handleEdit = (prod: Production) => {
@@ -99,12 +121,14 @@ export const ProductionManager: React.FC = () => {
             ? prod.materialsUsed
             : [{ materialId: '', inputTonnage: 0 }],
           outputTonnage: prod.outputTonnage,
+          outputUnit: prod.outputUnit || 'Tons',
           timeStart: prod.timeStart,
           timeStop: prod.timeStop,
           notes: prod.notes || ''
       });
       setEditingId(prod.id);
       setIsModalOpen(true);
+      setError(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -174,6 +198,8 @@ export const ProductionManager: React.FC = () => {
     setFilterPlant('');
     setFilterProduct('');
   };
+
+  const outputUnits = ['Tons', 'Kg', 'Litres', 'Pieces', 'Bags', 'M3'];
 
   return (
     <div className="space-y-6">
@@ -274,7 +300,9 @@ export const ProductionManager: React.FC = () => {
                   <td className="p-4">
                     <div className="flex flex-col">
                        <span className="text-gray-800 font-medium">{getEntityName(products, item.productId)}</span>
-                       <span className="text-xs text-green-600">Qty: {item.outputTonnage} Tons</span>
+                       <span className="text-xs text-green-600">
+                         Qty: {item.outputTonnage} {item.outputUnit || 'Tons'}
+                       </span>
                     </div>
                   </td>
                   <td className="p-4 text-gray-600">{item.duration.toFixed(1)} hrs</td>
@@ -309,6 +337,38 @@ export const ProductionManager: React.FC = () => {
               <h3 className="text-xl font-bold">{editingId ? 'Edit Production Record' : 'New Production Record'}</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">&times;</button>
             </div>
+            
+            {/* Error Banner */}
+            {error && (
+                <div className="mx-6 mt-6 bg-red-50 border border-red-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="text-red-600 flex-shrink-0 mt-0.5" size={20} />
+                        <div className="flex-1">
+                            <h3 className="font-bold text-red-800">Operation Failed</h3>
+                            <p className="text-sm text-red-700 mt-1">{error.message}</p>
+                            
+                            {error.sql && (
+                                <div className="mt-3 bg-gray-900 rounded-lg p-3 overflow-hidden">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs text-gray-400 flex items-center gap-1"><Terminal size={12}/> SQL Fix</span>
+                                        <button 
+                                        onClick={() => navigator.clipboard.writeText(error.sql!)}
+                                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                                        >
+                                            <Copy size={12} /> Copy
+                                        </button>
+                                    </div>
+                                    <code className="text-xs font-mono text-green-400 block break-all">
+                                        {error.sql}
+                                    </code>
+                                </div>
+                            )}
+                            {error.sql && <p className="text-xs text-red-600 mt-2">Run this SQL in your Supabase Query Editor.</p>}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -364,12 +424,24 @@ export const ProductionManager: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Output Quantity (Tons)</label>
-                  <input required type="number" step="0.1" className="w-full border rounded-lg p-2"
-                    value={formData.outputTonnage} onChange={e => setFormData({...formData, outputTonnage: parseFloat(e.target.value)})} />
+                <div className="col-span-2 flex gap-4">
+                    <div className="flex-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Output Quantity</label>
+                        <input required type="number" step="0.1" className="w-full border rounded-lg p-2"
+                            value={formData.outputTonnage} onChange={e => setFormData({...formData, outputTonnage: parseFloat(e.target.value)})} />
+                    </div>
+                    <div className="w-1/3">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+                        <select 
+                            className="w-full border rounded-lg p-2"
+                            value={formData.outputUnit}
+                            onChange={e => setFormData({...formData, outputUnit: e.target.value})}
+                        >
+                            {outputUnits.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                    </div>
                 </div>
-                <div className="col-span-1"></div> {/* Spacer */}
+                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Time Start</label>
                   <input required type="time" className="w-full border rounded-lg p-2"

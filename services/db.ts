@@ -24,6 +24,12 @@ using ( bucket_id = 'organization-assets' )
 with check ( bucket_id = 'organization-assets' );
 `;
 
+export const PRODUCTION_FIX_SQL = `
+-- Run this in Supabase SQL Editor to support multiple materials and dynamic units in production
+ALTER TABLE production ADD COLUMN IF NOT EXISTS "materialsUsed" jsonb DEFAULT '[]'::jsonb;
+ALTER TABLE production ADD COLUMN IF NOT EXISTS "outputUnit" text DEFAULT 'Tons';
+`;
+
 class DatabaseService {
   
   private async fetchTable<T>(table: string): Promise<T[]> {
@@ -46,7 +52,10 @@ class DatabaseService {
 
   private async update<T>(table: string, id: string, updates: Partial<T>): Promise<void> {
     const { error } = await supabase.from(table).update(updates).eq('id', id);
-    if (error) console.error(`Error updating ${table}:`, error);
+    if (error) {
+        console.error(`Error updating ${table}:`, error);
+        throw new Error(`Failed to update ${table}: ${error.message}`);
+    }
   }
 
   private async delete(table: string, id: string): Promise<void> {
