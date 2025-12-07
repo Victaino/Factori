@@ -82,11 +82,16 @@ export const ProductionManager: React.FC = () => {
     } catch (err: any) {
         console.error("Operation failed:", err);
         let msg = err.message || 'An error occurred';
+        const lowerMsg = msg.toLowerCase();
         let sql = undefined;
 
         // Detect missing column for materialsUsed or outputUnit
-        if ((msg.includes('materialsUsed') || msg.includes('outputUnit')) && (msg.includes('column') || msg.includes('cache'))) {
-            msg = "Database Update Required: Schema fields are missing.";
+        // Checks for terms like "Could not find the 'outputUnit' column" or "schema cache"
+        if (
+            (lowerMsg.includes('materialsused') || lowerMsg.includes('outputunit')) && 
+            (lowerMsg.includes('column') || lowerMsg.includes('cache') || lowerMsg.includes('find'))
+        ) {
+            msg = "Database Update Required: Schema fields are missing. Please run the SQL Fix.";
             sql = PRODUCTION_FIX_SQL;
         }
 

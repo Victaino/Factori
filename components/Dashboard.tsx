@@ -5,8 +5,8 @@ import {
 } from 'recharts';
 import { db } from '../services/db';
 import { 
-  Factory, AlertTriangle, DollarSign, AlertCircle, CheckCircle, Loader2, 
-  ShoppingBag, ShoppingCart, TrendingUp, Wallet, Filter, Calendar, TrendingDown, Banknote
+  Factory, AlertTriangle, AlertCircle, Loader2, 
+  ShoppingBag, ShoppingCart, TrendingUp, Filter, TrendingDown, Banknote
 } from 'lucide-react';
 import { 
   Production, IncidentReport, Material, Product, InventoryItem, 
@@ -126,8 +126,45 @@ export const Dashboard: React.FC = () => {
   const filteredExpenses = useMemo(() => expenses.filter(e => isDateInFilter(e.date)), [expenses, dateFilter]);
   const filteredPayroll = useMemo(() => payroll.filter(p => isDateInFilter(p.date)), [payroll, dateFilter]);
 
-  // Use generic 'Units' label since we support mixed units now
-  const totalProduction = filteredProduction.reduce((acc, curr) => acc + curr.outputTonnage, 0);
+  // Helper to convert diverse units to Tons with strict parsing (Used only for Charts normalization)
+  const getTonnage = (p: Production) => {
+    const qty = Number(p.outputTonnage);
+    if (isNaN(qty)) return 0;
+
+    const unit = (p.outputUnit || 'Tons').trim();
+    
+    switch (unit) {
+        case 'Tons': return qty;
+        case 'Kg': return qty / 1000;
+        case 'Litres': return qty / 1000; // Approx SG=1
+        case 'M3': return qty; // Approx SG=1
+        case 'Bags': return qty * 0.05; // Assumption: 50kg bags
+        case 'Pieces': return 0; // Cannot convert pieces to tons without weight/piece
+        default: return qty; // Default to treating as base unit (Tons) if unknown but numeric
+    }
+  };
+
+  // Group production totals by Unit (e.g. { 'Tons': 150, 'Kg': 5000 })
+  const productionByUnit = useMemo(() => {
+    const totals: Record<string, number> = {};
+    
+    if (filteredProduction.length === 0) {
+        return { 'Tons': 0 };
+    }
+
+    filteredProduction.forEach(p => {
+        const unit = p.outputUnit || 'Tons';
+        const qty = Number(p.outputTonnage) || 0;
+        
+        if (!totals[unit]) {
+           totals[unit] = 0;
+        }
+        totals[unit] += qty;
+    });
+    
+    return totals;
+  }, [filteredProduction]);
+  
   const totalSales = filteredSales.reduce((acc, curr) => acc + curr.amount, 0);
   const totalPurchases = filteredExpenses.reduce((acc, curr) => acc + curr.amount, 0);
   const totalPayroll = filteredPayroll.reduce((acc, curr) => acc + curr.amountPayable, 0);
@@ -148,6 +185,7 @@ export const Dashboard: React.FC = () => {
   const productionChartData = useMemo(() => {
     return production.slice(-10).map(p => ({
       ...p,
+      convertedOutput: getTonnage(p),
       totalInputTonnage: p.materialsUsed?.reduce((sum, mat) => sum + mat.inputTonnage, 0) || 0
     })).reverse();
   }, [production]);
@@ -199,14 +237,15 @@ export const Dashboard: React.FC = () => {
 
       {/* KPI Grid - Operational */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {config.showProductionOutput && (
+        {config.showProductionOutput && Object.entries(productionByUnit).sort().map(([unit, total]) => (
             <Card 
-            title="Production Output" 
-            value={`${totalProduction.toFixed(1)}`} 
+            key={unit}
+            title={`Production Output (${unit})`} 
+            value={new Intl.NumberFormat(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}).format(total)} 
             icon={<Factory size={24} />} 
             color="bg-blue-500" 
             />
-        )}
+        ))}
         {config.showInventoryValue && (
             <Card 
             title="Inventory Value" 
@@ -287,7 +326,7 @@ export const Dashboard: React.FC = () => {
                 <YAxis axisLine={false} tickLine={false} />
                 <Tooltip 
                     cursor={{fill: 'transparent'}}
-                    formatter={(value: number) => formatCurrency(value)}
+                    formatter={(value: number | string) => formatCurrency(Number(value))}
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 />
                 <Bar dataKey="amount" fill="#3b82f6" radius={[4, 4, 0, 0]}>
@@ -301,7 +340,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 dark:bg-slate-800 dark:border-slate-700">
-          <h3 className="text-lg font-bold text-gray-800 mb-6 dark:text-white">Recent Production Trend</h3>
+          <h3 className="text-lg font-bold text-gray-800 mb-6 dark:text-white">Recent Production Trend (Norm.)</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={productionChartData}>
@@ -310,7 +349,7 @@ export const Dashboard: React.FC = () => {
                 <YAxis axisLine={false} tickLine={false} />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="outputTonnage" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} name="Output (Qty)" />
+                <Line type="monotone" dataKey="convertedOutput" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} name="Output (Est. Tons)" />
                 <Line type="monotone" dataKey="totalInputTonnage" stroke="#94a3b8" strokeWidth={2} dot={{r: 4}} name="Input (Tons)" />
               </LineChart>
             </ResponsiveContainer>

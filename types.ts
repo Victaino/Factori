@@ -15,6 +15,7 @@ export interface Material {
   price: number;
   quantity: number;
   amount: number; // Derived: price * quantity
+  trackInventory?: boolean;
 }
 
 export interface Product {
@@ -24,6 +25,7 @@ export interface Product {
   quantity: number;
   amount: number; // Derived: price * quantity
   imageUrl?: string; // New field for product image
+  trackInventory?: boolean;
 }
 
 export interface InventoryItem {
@@ -157,6 +159,9 @@ export interface Employee {
   bankId: string; // FK
   dateEmployed: string;
   dateDisengaged?: string;
+  lastPlaceOfEmployment?: string;
+  guarantorName?: string;
+  guarantorPhone?: string;
 }
 
 export interface Deduction {

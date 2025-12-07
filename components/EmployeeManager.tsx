@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { db, STORAGE_FIX_SQL } from '../services/db';
+import { db, STORAGE_FIX_SQL, EMPLOYEE_FIELDS_SQL } from '../services/db';
 import { Employee, Bank } from '../types';
-import { UserPlus, Trash2, Plus, Mail, Phone, Briefcase, Calendar, CreditCard, Pencil, Search, X, Upload, Loader2, Image as ImageIcon, AlertCircle, Link as LinkIcon, Copy } from 'lucide-react';
+import { UserPlus, Trash2, Plus, Mail, Phone, Briefcase, Calendar, CreditCard, Pencil, Search, X, Upload, Loader2, Image as ImageIcon, AlertCircle, Link as LinkIcon, Copy, AlertTriangle, Terminal, Shield } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 
 export const EmployeeManager: React.FC = () => {
@@ -24,6 +24,7 @@ export const EmployeeManager: React.FC = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [useUrlInput, setUseUrlInput] = useState(false);
+  const [dbError, setDbError] = useState<{message: string, sql?: string} | null>(null);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -35,32 +36,49 @@ export const EmployeeManager: React.FC = () => {
     bankAccountNo: '',
     bankId: '',
     dateEmployed: new Date().toISOString().split('T')[0],
-    dateDisengaged: ''
+    dateDisengaged: '',
+    lastPlaceOfEmployment: '',
+    guarantorName: '',
+    guarantorPhone: ''
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingId) {
-        await db.updateEmployee(editingId, formData);
-        setEmployees(employees.map(e => e.id === editingId ? { ...e, ...formData } : e));
-    } else {
-        const added = await db.addEmployee(formData);
-        setEmployees([...employees, added]);
+    setDbError(null);
+    try {
+        if (editingId) {
+            await db.updateEmployee(editingId, formData);
+            setEmployees(employees.map(e => e.id === editingId ? { ...e, ...formData } : e));
+        } else {
+            const added = await db.addEmployee(formData);
+            setEmployees([...employees, added]);
+        }
+        
+        resetForm();
+        setIsModalOpen(false);
+    } catch (err: any) {
+        console.error("Employee save failed:", err);
+        let msg = err.message || 'Operation failed';
+        let sql = undefined;
+        if (msg.includes('guarantor') || msg.includes('lastPlaceOfEmployment') || (msg.includes('column') && msg.includes('find'))) {
+            msg = "Database Update Required: New employee fields are missing.";
+            sql = EMPLOYEE_FIELDS_SQL;
+        }
+        setDbError({ message: msg, sql });
     }
-    
-    resetForm();
-    setIsModalOpen(false);
   };
 
   const resetForm = () => {
       setFormData({
         name: '', position: '', photo: '', phone: '', email: '', salary: 0, 
-        bankAccountNo: '', bankId: '', dateEmployed: new Date().toISOString().split('T')[0], dateDisengaged: ''
+        bankAccountNo: '', bankId: '', dateEmployed: new Date().toISOString().split('T')[0], dateDisengaged: '',
+        lastPlaceOfEmployment: '', guarantorName: '', guarantorPhone: ''
       });
       setPreviewUrl(null);
       setUploadError(null);
       setEditingId(null);
       setUseUrlInput(false);
+      setDbError(null);
   };
 
   const handleEdit = (emp: Employee) => {
@@ -74,12 +92,16 @@ export const EmployeeManager: React.FC = () => {
           bankAccountNo: emp.bankAccountNo,
           bankId: emp.bankId,
           dateEmployed: emp.dateEmployed,
-          dateDisengaged: emp.dateDisengaged || ''
+          dateDisengaged: emp.dateDisengaged || '',
+          lastPlaceOfEmployment: emp.lastPlaceOfEmployment || '',
+          guarantorName: emp.guarantorName || '',
+          guarantorPhone: emp.guarantorPhone || ''
       });
       setPreviewUrl(emp.photo || null);
       setUploadError(null);
       setEditingId(emp.id);
       setUseUrlInput(!!emp.photo && !emp.photo.includes('supabase'));
+      setDbError(null);
       setIsModalOpen(true);
   };
 
@@ -249,6 +271,36 @@ export const EmployeeManager: React.FC = () => {
               <h3 className="text-xl font-bold">{editingId ? 'Edit Employee' : 'New Employee'}</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">&times;</button>
             </div>
+            
+            {dbError && (
+                <div className="mx-6 mt-4 bg-red-50 border border-red-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="text-red-600 flex-shrink-0 mt-0.5" size={20} />
+                        <div className="flex-1">
+                            <h3 className="font-bold text-red-800">Error</h3>
+                            <p className="text-sm text-red-700 mt-1">{dbError.message}</p>
+                            
+                            {dbError.sql && (
+                                <div className="mt-3 bg-gray-900 rounded-lg p-3 overflow-hidden">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs text-gray-400 flex items-center gap-1"><Terminal size={12}/> SQL Fix</span>
+                                        <button 
+                                        onClick={() => navigator.clipboard.writeText(dbError.sql!)}
+                                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                                        >
+                                            <Copy size={12} /> Copy
+                                        </button>
+                                    </div>
+                                    <code className="text-xs font-mono text-green-400 block break-all">
+                                        {dbError.sql}
+                                    </code>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               
               {/* Photo Upload Section */}
@@ -400,6 +452,33 @@ export const EmployeeManager: React.FC = () => {
                    <label className="block text-sm font-medium text-gray-700 mb-1">Date Disengaged (Optional)</label>
                    <input type="date" className="w-full border rounded-lg p-2"
                      value={formData.dateDisengaged} onChange={e => setFormData({...formData, dateDisengaged: e.target.value})} />
+                </div>
+
+                <div className="col-span-2 mt-4 pt-4 border-t">
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                        <h4 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+                            <Shield size={16} className="text-indigo-600"/>
+                            Background Check Info
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Last Place of Employment</label>
+                                <input type="text" className="w-full border rounded-lg p-2"
+                                placeholder="Previous Company Name"
+                                value={formData.lastPlaceOfEmployment} onChange={e => setFormData({...formData, lastPlaceOfEmployment: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Guarantor Name</label>
+                                <input type="text" className="w-full border rounded-lg p-2"
+                                value={formData.guarantorName} onChange={e => setFormData({...formData, guarantorName: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Guarantor Number</label>
+                                <input type="tel" className="w-full border rounded-lg p-2"
+                                value={formData.guarantorPhone} onChange={e => setFormData({...formData, guarantorPhone: e.target.value})} />
+                            </div>
+                        </div>
+                    </div>
                 </div>
               </div>
 

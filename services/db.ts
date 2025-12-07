@@ -28,6 +28,22 @@ export const PRODUCTION_FIX_SQL = `
 -- Run this in Supabase SQL Editor to support multiple materials and dynamic units in production
 ALTER TABLE production ADD COLUMN IF NOT EXISTS "materialsUsed" jsonb DEFAULT '[]'::jsonb;
 ALTER TABLE production ADD COLUMN IF NOT EXISTS "outputUnit" text DEFAULT 'Tons';
+
+-- IMPORTANT: Refresh the schema cache so the API sees the new columns immediately
+NOTIFY pgrst, 'reload config';
+`;
+
+export const INVENTORY_TRACK_SQL = `
+ALTER TABLE materials ADD COLUMN IF NOT EXISTS "trackInventory" boolean DEFAULT true;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS "trackInventory" boolean DEFAULT true;
+NOTIFY pgrst, 'reload config';
+`;
+
+export const EMPLOYEE_FIELDS_SQL = `
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS "lastPlaceOfEmployment" text;
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS "guarantorName" text;
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS "guarantorPhone" text;
+NOTIFY pgrst, 'reload config';
 `;
 
 class DatabaseService {
@@ -326,7 +342,8 @@ class DatabaseService {
     const product = (await this.insert('products', newItem))!;
     
     // AUTOMATION: Create corresponding inventory record when a product is defined
-    if(product) {
+    // Only if trackInventory is not explicitly set to false
+    if(product && (data.trackInventory !== false)) {
         // Check if an inventory item already exists for this product (redundancy check)
         const { data: existing } = await supabase.from('inventory').select('*').eq('productId', product.id).single();
         
@@ -349,6 +366,23 @@ class DatabaseService {
      if (updates.price) {
         const { error } = await supabase.from('inventory').update({ price: updates.price }).eq('productId', id);
         if (error) console.error("Error syncing product price to inventory", error);
+     }
+
+     // If enabling tracking, ensure inventory record exists
+     if (updates.trackInventory === true) {
+         const { data: existing } = await supabase.from('inventory').select('*').eq('productId', id).single();
+         if (!existing) {
+             const { data: prod } = await supabase.from('products').select('*').eq('id', id).single();
+             if (prod) {
+                await this.insert('inventory', {
+                    id: generateId(),
+                    productId: id,
+                    quantity: prod.quantity || 0,
+                    price: prod.price,
+                    lowStockThreshold: 10
+                });
+             }
+         }
      }
   }
 
@@ -382,7 +416,7 @@ class DatabaseService {
         const materials = await this.getMaterials(); // Fetch all materials once
         for (const matUsed of production.materialsUsed) {
           const material = materials.find(m => m.id === matUsed.materialId);
-          if (material) {
+          if (material && material.trackInventory !== false) { // Only update if tracking enabled
             const newQty = Math.max(0, material.quantity - matUsed.inputTonnage);
             await this.updateMaterial(material.id, { quantity: newQty });
           }
@@ -390,19 +424,24 @@ class DatabaseService {
       }
 
       // 2. Increase Inventory Product (Add Stock)
-      const inventory = await this.getInventory();
-      const invItem = inventory.find(i => i.productId === data.productId);
-      if (invItem) {
-          await this.updateInventory(invItem.id, { quantity: invItem.quantity + data.outputTonnage });
-      } else {
-            // Fallback: If inventory item missing for some reason
-            await this.insert('inventory', {
-              id: generateId(),
-              productId: data.productId,
-              quantity: data.outputTonnage,
-              price: 0, 
-              lowStockThreshold: 10
-          });
+      // Check if product tracking is enabled
+      const { data: product } = await supabase.from('products').select('trackInventory').eq('id', data.productId).single();
+      
+      if (product && product.trackInventory !== false) {
+          const inventory = await this.getInventory();
+          const invItem = inventory.find(i => i.productId === data.productId);
+          if (invItem) {
+              await this.updateInventory(invItem.id, { quantity: invItem.quantity + data.outputTonnage });
+          } else {
+                // Fallback: If inventory item missing for some reason
+                await this.insert('inventory', {
+                  id: generateId(),
+                  productId: data.productId,
+                  quantity: data.outputTonnage,
+                  price: 0, 
+                  lowStockThreshold: 10
+              });
+          }
       }
     }
     return production;
@@ -472,7 +511,7 @@ class DatabaseService {
         // 2. Update Order Status
         await this.updateSalesOrder(id, { status: 'Confirmed' });
 
-        // 3. Deduct Inventory (Reduce Stock)
+        // 3. Deduct Inventory (Reduce Stock) - if tracked
         const inventory = await this.getInventory();
         const invItem = inventory.find(i => i.productId === order.productId);
         if (invItem) {

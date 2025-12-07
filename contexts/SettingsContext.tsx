@@ -95,96 +95,82 @@ const COLOR_PALETTES: Record<ColorTheme, Record<number, string>> = {
     700: '14 116 144',
     800: '21 94 117',
     900: '22 78 99',
-  },
+  }
 };
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<OrganizationSettings | null>(null);
-  
-  // Local state for immediate UI feedback (backed by org settings when available)
-  const [currency, setCurrency] = useState<string>('$');
-  const [theme, setTheme] = useState<Theme>('system');
+  const [currency, setCurrency] = useState('₦');
+  const [theme, setTheme] = useState<Theme>('light');
   const [colorTheme, setColorTheme] = useState<ColorTheme>('blue');
+  const [isConfigured, setIsConfigured] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Load Organization Settings on Mount
   useEffect(() => {
-    const loadSettings = async () => {
-      const orgSettings = await db.getOrganizationSettings();
-      if (orgSettings) {
-        setSettings(orgSettings);
-        setCurrency(orgSettings.baseCurrency || '$');
-        setTheme((orgSettings.defaultTheme as Theme) || 'system');
-        setColorTheme((orgSettings.defaultColorTheme as ColorTheme) || 'blue');
-      } else {
-        // Fallback to local storage if no org settings yet (e.g. before setup)
-        setCurrency(localStorage.getItem('app_currency') || '$');
-        setTheme((localStorage.getItem('app_theme') as Theme) || 'system');
-        setColorTheme((localStorage.getItem('app_color_theme') as ColorTheme) || 'blue');
+    const fetchSettings = async () => {
+      try {
+        const data = await db.getOrganizationSettings();
+        if (data) {
+          setSettings(data);
+          setCurrency(data.baseCurrency || '₦');
+          setTheme((data.defaultTheme as Theme) || 'light');
+          setColorTheme((data.defaultColorTheme as ColorTheme) || 'blue');
+          setIsConfigured(!!data.companyName);
+        } else {
+          setIsConfigured(false);
+        }
+      } catch (e) {
+        console.error("Error loading settings", e);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
-    loadSettings();
+    fetchSettings();
   }, []);
 
+  // Update CSS Variables for Theming
+  useEffect(() => {
+    const root = document.documentElement;
+    const palette = COLOR_PALETTES[colorTheme];
+    
+    // Set CSS variables for primary color
+    Object.entries(palette).forEach(([shade, value]) => {
+      // Cast value to string to resolve TypeScript error where value is inferred as unknown
+      root.style.setProperty(`--color-primary-${shade}`, value as string);
+    });
+
+    // Handle Light/Dark Mode
+    if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, [theme, colorTheme]);
+
   const updateSettings = (newSettings: OrganizationSettings) => {
-      if (!newSettings) {
-          console.error("updateSettings called with null. Database insertion likely failed.");
-          return;
-      }
-      setSettings(newSettings);
-      setCurrency(newSettings.baseCurrency || '$');
-      setTheme((newSettings.defaultTheme as Theme) || 'system');
-      setColorTheme((newSettings.defaultColorTheme as ColorTheme) || 'blue');
+    setSettings(newSettings);
+    setCurrency(newSettings.baseCurrency);
+    setTheme(newSettings.defaultTheme as Theme);
+    if (newSettings.defaultColorTheme) setColorTheme(newSettings.defaultColorTheme as ColorTheme);
+    setIsConfigured(!!newSettings.companyName);
   };
 
-  // Persist local preferences (redundancy) and apply styles
-  useEffect(() => {
-    localStorage.setItem('app_currency', currency);
-  }, [currency]);
-
-  // Handle Light/Dark Theme changes
-  useEffect(() => {
-    localStorage.setItem('app_theme', theme);
-    const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-
-    if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      root.classList.add(systemTheme);
-    } else {
-      root.classList.add(theme);
-    }
-  }, [theme]);
-
-  // Handle Color Theme changes
-  useEffect(() => {
-    localStorage.setItem('app_color_theme', colorTheme);
-    const root = window.document.documentElement;
-    const palette = COLOR_PALETTES[colorTheme];
-
-    if (palette) {
-      Object.entries(palette).forEach(([shade, value]) => {
-        root.style.setProperty(`--color-primary-${shade}`, value as string);
-      });
-    }
-  }, [colorTheme]);
-
-  // Helper to format currency
   const formatCurrency = (amount: number) => {
-    return `${currency}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return new Intl.NumberFormat('en-NG', {
+      style: 'currency',
+      currency: 'NGN', // Fallback
+      currencyDisplay: 'narrowSymbol'
+    }).format(amount).replace('₦', currency);
   };
 
   return (
-    <SettingsContext.Provider value={{ 
-        currency, setCurrency, 
-        theme, setTheme, 
-        colorTheme, setColorTheme, 
-        formatCurrency,
-        settings,
-        updateSettings,
-        isConfigured: !!settings,
-        loading
+    <SettingsContext.Provider value={{
+      currency, setCurrency,
+      theme, setTheme,
+      colorTheme, setColorTheme,
+      formatCurrency,
+      settings, updateSettings,
+      isConfigured, loading
     }}>
       {children}
     </SettingsContext.Provider>
@@ -193,7 +179,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
 export const useSettings = () => {
   const context = useContext(SettingsContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useSettings must be used within a SettingsProvider');
   }
   return context;

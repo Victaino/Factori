@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, STORAGE_FIX_SQL } from '../services/db';
+import { db, STORAGE_FIX_SQL, INVENTORY_TRACK_SQL } from '../services/db';
 import { Material, Product, InventoryItem } from '../types';
-import { Plus, Trash2, Box, Package, ShoppingCart, Save, AlertTriangle, Pencil, Check, X, ArrowRightLeft, Image as ImageIcon, Search, Upload, Loader2, AlertCircle, Link as LinkIcon, Copy } from 'lucide-react';
+import { Plus, Trash2, Box, Package, ShoppingCart, Save, AlertTriangle, Pencil, Check, X, ArrowRightLeft, Image as ImageIcon, Search, Upload, Loader2, AlertCircle, Link as LinkIcon, Copy, Terminal, Minus, RefreshCw } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 
 type Tab = 'MATERIALS' | 'PRODUCTS' | 'INVENTORY';
@@ -11,7 +11,7 @@ interface InventoryRowProps {
   item: InventoryItem;
   productName: string;
   onDelete: (id: string) => void;
-  onUpdate: (id: string, newQuantity: number) => void;
+  onUpdate: (id: string, newQuantity: number) => Promise<void>;
   onUpdateThreshold: (id: string, newThreshold: number) => void;
   formatCurrency: (amount: number) => string;
 }
@@ -19,25 +19,61 @@ interface InventoryRowProps {
 const InventoryRow: React.FC<InventoryRowProps> = ({ item, productName, onDelete, onUpdate, onUpdateThreshold, formatCurrency }) => {
   const [adjustment, setAdjustment] = useState('');
   const [threshold, setThreshold] = useState(item.lowStockThreshold?.toString() || '0');
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const isLowStock = item.lowStockThreshold !== undefined && item.quantity <= item.lowStockThreshold;
 
-  const handleAdjust = () => {
+  const handleAdjustment = async (type: 'add' | 'subtract') => {
     const val = parseFloat(adjustment);
-    if (isNaN(val) || val === 0) return;
-    
-    const newQty = item.quantity + val;
-    if (newQty < 0) {
-      alert("Cannot reduce inventory below zero.");
-      return;
+    if (isNaN(val) || val <= 0) return;
+
+    // Ensure strictly numeric calculation to avoid string concatenation
+    const currentQty = typeof item.quantity === 'string' ? parseFloat(item.quantity) : item.quantity;
+    let newQty = currentQty;
+    let actionLabel = '';
+
+    if (type === 'add') {
+        newQty = currentQty + val;
+        actionLabel = 'Add to inventory';
+    } else {
+        newQty = currentQty - val;
+        actionLabel = 'Remove from inventory';
     }
 
-    const confirmMsg = `Adjust inventory for ${productName}?\n\nCurrent: ${item.quantity}\nAdjustment: ${val > 0 ? '+' : ''}${val}\nNew Quantity: ${newQty}`;
+    if (newQty < 0) {
+        alert("Cannot reduce inventory below zero.");
+        return;
+    }
+
+    // Confirmation
+    const confirmMsg = `${actionLabel} for ${productName}?\n\nCurrent: ${currentQty}\nChange: ${type === 'add' ? '+' : '-'}${val}\nNew Quantity: ${newQty}`;
     
     if (window.confirm(confirmMsg)) {
-      onUpdate(item.id, newQty);
-      setAdjustment('');
+        setIsUpdating(true);
+        try {
+            await onUpdate(item.id, newQty);
+            setAdjustment('');
+        } catch (error) {
+            console.error("Adjustment failed:", error);
+            alert("Failed to update inventory. Please try again.");
+        } finally {
+            setIsUpdating(false);
+        }
     }
+  };
+
+  const handleSetExact = async () => {
+      const val = prompt(`Set exact quantity for ${productName}:`, item.quantity.toString());
+      if (val === null) return;
+      const newQty = parseFloat(val);
+      if (!isNaN(newQty) && newQty >= 0) {
+          setIsUpdating(true);
+          try {
+            await onUpdate(item.id, newQty);
+          } finally {
+            setIsUpdating(false);
+          }
+      }
   };
 
   const handleThresholdBlur = () => {
@@ -53,35 +89,65 @@ const InventoryRow: React.FC<InventoryRowProps> = ({ item, productName, onDelete
         {isLowStock && <AlertTriangle size={16} className="text-red-500" />}
         {productName}
       </td>
-      <td className={`p-4 font-semibold ${isLowStock ? 'text-red-600' : 'text-gray-600'}`}>{item.quantity}</td>
+      <td className="p-4">
+          <div className="flex items-center gap-2">
+            <span className={`font-semibold ${isLowStock ? 'text-red-600' : 'text-gray-600'}`}>
+                {Number(item.quantity).toFixed(2)}
+            </span>
+            <button 
+                onClick={handleSetExact}
+                disabled={isUpdating}
+                className="text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 disabled:opacity-50"
+                title="Set exact quantity (Stocktake)"
+            >
+                <Pencil size={12} />
+            </button>
+          </div>
+      </td>
       <td className="p-4">
         <div className="flex items-center gap-1">
+           <button 
+            onClick={() => handleAdjustment('subtract')}
+            disabled={!adjustment || parseFloat(adjustment) <= 0 || isUpdating}
+            className="w-8 h-8 flex items-center justify-center bg-red-100 text-red-600 rounded-lg hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="Remove Stock"
+          >
+            {isUpdating ? <Loader2 size={14} className="animate-spin"/> : <Minus size={16} />}
+          </button>
            <input 
             type="number"
-            className="w-20 border rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-500"
-            placeholder="+/-"
+            min="0"
+            className="w-20 border-y border-x border-gray-300 rounded-lg px-2 py-1.5 text-center text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mx-1"
+            placeholder="Qty"
             value={adjustment}
             onChange={(e) => setAdjustment(e.target.value)}
+            disabled={isUpdating}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAdjustment('add');
+            }}
           />
           <button 
-            onClick={handleAdjust}
-            disabled={!adjustment}
-            className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 disabled:opacity-50"
-            title="Apply Adjustment"
+            onClick={() => handleAdjustment('add')}
+            disabled={!adjustment || parseFloat(adjustment) <= 0 || isUpdating}
+            className="w-8 h-8 flex items-center justify-center bg-green-100 text-green-600 rounded-lg hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="Add Stock"
           >
-            <ArrowRightLeft size={16} />
+            {isUpdating ? <Loader2 size={14} className="animate-spin"/> : <Plus size={16} />}
           </button>
         </div>
       </td>
       <td className="p-4">
-        <input 
-          type="number"
-          min="0"
-          className="w-20 border rounded px-2 py-1 text-sm text-gray-600 focus:border-blue-500 outline-none bg-white/50"
-          value={threshold}
-          onChange={(e) => setThreshold(e.target.value)}
-          onBlur={handleThresholdBlur}
-        />
+        <div className="flex items-center gap-1">
+            <span className="text-xs text-gray-400">Min:</span>
+            <input 
+            type="number"
+            min="0"
+            className="w-16 border rounded px-2 py-1 text-sm text-gray-600 focus:border-blue-500 outline-none bg-white/50"
+            value={threshold}
+            onChange={(e) => setThreshold(e.target.value)}
+            onBlur={handleThresholdBlur}
+            />
+        </div>
       </td>
       <td className="p-4 text-gray-600">{formatCurrency(item.price)}</td>
       <td className="p-4 text-gray-800 font-medium">{formatCurrency(item.quantity * item.price)}</td>
@@ -109,22 +175,33 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [useUrlInput, setUseUrlInput] = useState(false);
+  const [dbError, setDbError] = useState<{message: string, sql?: string} | null>(null);
 
   // Form Data
-  const [formData, setFormData] = useState({ name: '', price: 0, quantity: 0, imageUrl: '' });
+  const [formData, setFormData] = useState({ 
+    name: '', 
+    price: 0, 
+    quantity: 0, 
+    imageUrl: '',
+    trackInventory: true 
+  });
 
   const refreshData = async () => {
-    const [mat, prod, inv] = await Promise.all([
-      db.getMaterials(),
-      db.getProducts(),
-      db.getInventory()
-    ]);
-    setMaterials(mat);
-    setProducts(prod);
-    
-    // Safety check: Only keep inventory items that have a corresponding product definition.
-    const validInventory = inv.filter(i => prod.some(p => p.id === i.productId));
-    setInventory(validInventory);
+    try {
+      const [mat, prod, inv] = await Promise.all([
+        db.getMaterials(),
+        db.getProducts(),
+        db.getInventory()
+      ]);
+      setMaterials(mat);
+      setProducts(prod);
+      
+      // Safety check: Only keep inventory items that have a corresponding product definition.
+      const validInventory = inv.filter(i => prod.some(p => p.id === i.productId));
+      setInventory(validInventory);
+    } catch (e) {
+      console.error("Failed to load inventory data", e);
+    }
   };
 
   useEffect(() => {
@@ -152,45 +229,65 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
   // CRUD Handlers
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (modalType === 'MATERIAL') {
-      if (editingItem) {
-        await db.updateMaterial(editingItem.id, {
-          name: formData.name,
-          price: formData.price,
-          quantity: formData.quantity
-        });
-      } else {
-        await db.addMaterial({
-          name: formData.name,
-          price: formData.price,
-          quantity: formData.quantity
-        });
-      }
-    } else if (modalType === 'PRODUCT') {
-      if (editingItem) {
-        await db.updateProduct(editingItem.id, {
-          name: formData.name,
-          price: formData.price,
-          quantity: formData.quantity,
-          imageUrl: formData.imageUrl
-        });
-      } else {
-        await db.addProduct({
-           name: formData.name,
-           price: formData.price,
-           quantity: formData.quantity,
-           imageUrl: formData.imageUrl
-        });
-      }
+    setDbError(null);
+    try {
+        if (modalType === 'MATERIAL') {
+          if (editingItem) {
+            await db.updateMaterial(editingItem.id, {
+              name: formData.name,
+              price: formData.price,
+              quantity: formData.quantity,
+              trackInventory: formData.trackInventory
+            });
+          } else {
+            await db.addMaterial({
+              name: formData.name,
+              price: formData.price,
+              quantity: formData.quantity,
+              trackInventory: formData.trackInventory
+            });
+          }
+        } else if (modalType === 'PRODUCT') {
+          if (editingItem) {
+            await db.updateProduct(editingItem.id, {
+              name: formData.name,
+              price: formData.price,
+              quantity: formData.quantity,
+              imageUrl: formData.imageUrl,
+              trackInventory: formData.trackInventory
+            });
+          } else {
+            await db.addProduct({
+               name: formData.name,
+               price: formData.price,
+               quantity: formData.quantity,
+               imageUrl: formData.imageUrl,
+               trackInventory: formData.trackInventory
+            });
+          }
+        }
+        setIsModalOpen(false);
+        setEditingItem(null);
+        setModalType(null);
+        resetForm();
+        refreshData();
+    } catch (err: any) {
+        console.error("Save failed:", err);
+        let msg = err.message || 'Operation failed';
+        let sql = undefined;
+        if ((msg.includes('trackInventory') && msg.includes('column')) || msg.includes('schema')) {
+            msg = "Database Update Required: 'trackInventory' column missing.";
+            sql = INVENTORY_TRACK_SQL;
+        }
+        setDbError({ message: msg, sql });
     }
-    setIsModalOpen(false);
-    setEditingItem(null);
-    setModalType(null);
-    setFormData({ name: '', price: 0, quantity: 0, imageUrl: '' });
+  };
+
+  const resetForm = () => {
+    setFormData({ name: '', price: 0, quantity: 0, imageUrl: '', trackInventory: true });
     setPreviewUrl(null);
     setUploadError(null);
     setUseUrlInput(false);
-    refreshData();
   };
 
   const handleEdit = (item: any, type: 'MATERIAL' | 'PRODUCT') => {
@@ -200,21 +297,21 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
       name: item.name, 
       price: item.price, 
       quantity: item.quantity,
-      imageUrl: item.imageUrl || ''
+      imageUrl: item.imageUrl || '',
+      trackInventory: item.trackInventory !== false // Default true if undefined
     });
     setPreviewUrl(item.imageUrl || null);
     setUploadError(null);
     setUseUrlInput(!!item.imageUrl && !item.imageUrl.includes('supabase')); // If it's an external URL, default to URL input mode
+    setDbError(null);
     setIsModalOpen(true);
   };
 
   const handleAdd = (type: 'MATERIAL' | 'PRODUCT') => {
     setEditingItem(null);
     setModalType(type);
-    setFormData({ name: '', price: 0, quantity: 0, imageUrl: '' });
-    setPreviewUrl(null);
-    setUploadError(null);
-    setUseUrlInput(false);
+    resetForm();
+    setDbError(null);
     setIsModalOpen(true);
   };
 
@@ -227,7 +324,7 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
 
   const handleUpdateInventory = async (id: string, newQty: number) => {
     await db.updateInventory(id, { quantity: newQty });
-    refreshData();
+    await refreshData();
   };
 
   const handleUpdateThreshold = async (id: string, newThreshold: number) => {
@@ -343,8 +440,8 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
                 <tr>
                   <th className="p-4 font-semibold text-gray-600">Product</th>
                   <th className="p-4 font-semibold text-gray-600">Current Qty</th>
-                  <th className="p-4 font-semibold text-gray-600">Adjust</th>
-                  <th className="p-4 font-semibold text-gray-600">Min Stock</th>
+                  <th className="p-4 font-semibold text-gray-600">Adjust Stock</th>
+                  <th className="p-4 font-semibold text-gray-600">Threshold</th>
                   <th className="p-4 font-semibold text-gray-600">Unit Price</th>
                   <th className="p-4 font-semibold text-gray-600">Total Value</th>
                 </tr>
@@ -392,10 +489,15 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
               <tbody className="divide-y">
                 {filteredMaterials.map(m => (
                   <tr key={m.id} className="hover:bg-gray-50">
-                    <td className="p-4 font-medium text-gray-800">{m.name}</td>
+                    <td className="p-4 font-medium text-gray-800">
+                      {m.name}
+                      {m.trackInventory === false && (
+                         <span className="ml-2 text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Tracking Off</span>
+                      )}
+                    </td>
                     <td className="p-4 text-gray-600">{formatCurrency(m.price)}</td>
-                    <td className="p-4 text-gray-600">{m.quantity}</td>
-                    <td className="p-4 text-gray-800 font-medium">{formatCurrency(m.amount)}</td>
+                    <td className="p-4 text-gray-600">{m.trackInventory !== false ? Number(m.quantity).toFixed(2) : '-'}</td>
+                    <td className="p-4 text-gray-800 font-medium">{m.trackInventory !== false ? formatCurrency(m.amount) : '-'}</td>
                     <td className="p-4 text-right flex justify-end gap-2">
                        <button onClick={() => handleEdit(m, 'MATERIAL')} className="text-blue-400 hover:text-blue-600"><Pencil size={18}/></button>
                        <button onClick={() => handleDelete(m.id, 'MATERIAL')} className="text-red-400 hover:text-red-600"><Trash2 size={18}/></button>
@@ -443,10 +545,15 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
                         )}
                       </div>
                     </td>
-                    <td className="p-4 font-medium text-gray-800">{p.name}</td>
+                    <td className="p-4 font-medium text-gray-800">
+                      {p.name}
+                      {p.trackInventory === false && (
+                         <span className="ml-2 text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Tracking Off</span>
+                      )}
+                    </td>
                     <td className="p-4 text-gray-600">{formatCurrency(p.price)}</td>
-                    <td className="p-4 text-gray-600">{p.quantity}</td>
-                    <td className="p-4 text-gray-800 font-medium">{formatCurrency(p.amount)}</td>
+                    <td className="p-4 text-gray-600">{p.trackInventory !== false ? Number(p.quantity).toFixed(2) : '-'}</td>
+                    <td className="p-4 text-gray-800 font-medium">{p.trackInventory !== false ? formatCurrency(p.amount) : '-'}</td>
                     <td className="p-4 text-right flex justify-end gap-2">
                         <button onClick={() => handleEdit(p, 'PRODUCT')} className="text-blue-400 hover:text-blue-600"><Pencil size={18}/></button>
                         <button onClick={() => handleDelete(p.id, 'PRODUCT')} className="text-red-400 hover:text-red-600"><Trash2 size={18}/></button>
@@ -472,6 +579,36 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
               </h3>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">&times;</button>
             </div>
+            
+             {dbError && (
+                <div className="mx-6 mt-4 bg-red-50 border border-red-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="text-red-600 flex-shrink-0 mt-0.5" size={20} />
+                        <div className="flex-1">
+                            <h3 className="font-bold text-red-800">Error</h3>
+                            <p className="text-sm text-red-700 mt-1">{dbError.message}</p>
+                            
+                            {dbError.sql && (
+                                <div className="mt-3 bg-gray-900 rounded-lg p-3 overflow-hidden">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs text-gray-400 flex items-center gap-1"><Terminal size={12}/> SQL Fix</span>
+                                        <button 
+                                        onClick={() => navigator.clipboard.writeText(dbError.sql!)}
+                                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                                        >
+                                            <Copy size={12} /> Copy
+                                        </button>
+                                    </div>
+                                    <code className="text-xs font-mono text-green-400 block break-all">
+                                        {dbError.sql}
+                                    </code>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <form onSubmit={handleSave} className="p-6 space-y-6">
               
               {/* Product Image Section */}
@@ -584,11 +721,40 @@ export const InventoryManager: React.FC<{ initialTab?: Tab }> = ({ initialTab = 
                      value={formData.price} onChange={e => setFormData({...formData, price: parseFloat(e.target.value)})} />
                 </div>
                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                   <input required type="number" min="0" step="0.01" className="w-full border rounded-lg p-2"
-                     value={formData.quantity} onChange={e => setFormData({...formData, quantity: parseFloat(e.target.value)})} />
+                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {formData.trackInventory ? 'Quantity' : 'Initial Quantity (Ignored)'}
+                   </label>
+                   <input 
+                    type="number" 
+                    min="0" 
+                    step="0.01" 
+                    className={`w-full border rounded-lg p-2 ${!formData.trackInventory ? 'bg-gray-100 text-gray-400' : ''}`}
+                    disabled={!formData.trackInventory}
+                    value={formData.quantity} 
+                    onChange={e => setFormData({...formData, quantity: parseFloat(e.target.value)})} 
+                   />
                 </div>
               </div>
+
+               {/* Inventory Tracking Toggle */}
+               <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <input 
+                        type="checkbox" 
+                        id="trackInventory"
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                        checked={formData.trackInventory}
+                        onChange={e => setFormData({...formData, trackInventory: e.target.checked})}
+                    />
+                    <label htmlFor="trackInventory" className="text-sm font-medium text-gray-700 cursor-pointer select-none">
+                        Enable Inventory Tracking
+                    </label>
+                </div>
+                
+                {!formData.trackInventory && (
+                    <p className="text-xs text-amber-600 -mt-4 ml-1">
+                        Note: Inventory counts and stock alerts will be disabled for this item.
+                    </p>
+                )}
               
               <button type="submit" disabled={uploading} className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
                 {uploading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
