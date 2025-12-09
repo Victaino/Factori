@@ -87,7 +87,7 @@ export const EmployeeManager: React.FC = () => {
           position: emp.position,
           photo: emp.photo,
           phone: emp.phone,
-          email: emp.email,
+          email: emp.email || '',
           salary: emp.salary,
           bankAccountNo: emp.bankAccountNo || '',
           bankId: emp.bankId || '',
@@ -152,7 +152,7 @@ export const EmployeeManager: React.FC = () => {
     return employees.filter(e => 
       e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       e.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      e.email.toLowerCase().includes(searchTerm.toLowerCase())
+      (e.email || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [employees, searchTerm]);
 
@@ -225,10 +225,12 @@ export const EmployeeManager: React.FC = () => {
             </div>
 
             <div className="space-y-2 text-sm text-gray-600">
-              <div className="flex items-center gap-2">
-                <Mail size={16} className="text-gray-400" />
-                <a href={`mailto:${emp.email}`} className="hover:text-indigo-600">{emp.email}</a>
-              </div>
+              {emp.email && (
+                <div className="flex items-center gap-2">
+                  <Mail size={16} className="text-gray-400" />
+                  <a href={`mailto:${emp.email}`} className="hover:text-indigo-600">{emp.email}</a>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <Phone size={16} className="text-gray-400" />
                 <span>{emp.phone}</span>
@@ -416,7 +418,7 @@ export const EmployeeManager: React.FC = () => {
                 
                 <div>
                    <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                   <input required type="email" className="w-full border rounded-lg p-2"
+                   <input type="email" className="w-full border rounded-lg p-2"
                      value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
                 </div>
                 <div>

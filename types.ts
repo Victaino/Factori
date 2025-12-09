@@ -153,7 +153,7 @@ export interface Employee {
   position: string;
   photo: string; // URL or base64 placeholder
   phone: string;
-  email: string;
+  email?: string;
   salary: number;
   bankAccountNo?: string; // Optional
   bankId?: string; // FK Optional
