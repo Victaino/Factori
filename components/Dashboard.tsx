@@ -1,7 +1,7 @@
 
 import React, { useMemo, useEffect, useState } from 'react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, Cell
 } from 'recharts';
 import { db } from '../services/db';
 import { 
@@ -326,12 +326,12 @@ export const Dashboard: React.FC = () => {
                 <YAxis axisLine={false} tickLine={false} />
                 <Tooltip 
                     cursor={{fill: 'transparent'}}
-                    formatter={(value: number | string) => formatCurrency(Number(value))}
+                    formatter={(value: any) => formatCurrency(Number(value))}
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 />
                 <Bar dataKey="amount" fill="#3b82f6" radius={[4, 4, 0, 0]}>
                     {chartData.map((entry, index) => (
-                        <cell key={`cell-${index}`} fill={['#10b981', '#6366f1', '#ec4899'][index]} />
+                        <Cell key={`cell-${index}`} fill={['#10b981', '#6366f1', '#ec4899'][index]} />
                     ))}
                 </Bar>
               </BarChart>

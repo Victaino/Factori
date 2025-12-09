@@ -89,8 +89,8 @@ export const EmployeeManager: React.FC = () => {
           phone: emp.phone,
           email: emp.email,
           salary: emp.salary,
-          bankAccountNo: emp.bankAccountNo,
-          bankId: emp.bankId,
+          bankAccountNo: emp.bankAccountNo || '',
+          bankId: emp.bankId || '',
           dateEmployed: emp.dateEmployed,
           dateDisengaged: emp.dateDisengaged || '',
           lastPlaceOfEmployment: emp.lastPlaceOfEmployment || '',
@@ -251,7 +251,11 @@ export const EmployeeManager: React.FC = () => {
                  </div>
                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
                    <CreditCard size={14} />
-                   <span>{getBankName(emp.bankId)} •••• {emp.bankAccountNo.slice(-4)}</span>
+                   {emp.bankId && emp.bankAccountNo ? (
+                       <span>{getBankName(emp.bankId)} •••• {emp.bankAccountNo.slice(-4)}</span>
+                   ) : (
+                       <span className="text-gray-400 italic">No bank details</span>
+                   )}
                  </div>
               </div>
             </div>
@@ -427,19 +431,25 @@ export const EmployeeManager: React.FC = () => {
                      value={formData.salary} onChange={e => setFormData({...formData, salary: parseFloat(e.target.value)})} />
                 </div>
 
+                {/* Bank Details - Now Optional */}
                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">Bank</label>
-                   <select required className="w-full border rounded-lg p-2"
-                     value={formData.bankId} onChange={e => setFormData({...formData, bankId: e.target.value})}>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Bank (Optional)</label>
+                   <select 
+                     className="w-full border rounded-lg p-2"
+                     value={formData.bankId} onChange={e => setFormData({...formData, bankId: e.target.value})}
+                   >
                      <option value="">Select Bank</option>
                      {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                    </select>
                 </div>
                 
                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
-                   <input required type="text" className="w-full border rounded-lg p-2"
-                     value={formData.bankAccountNo} onChange={e => setFormData({...formData, bankAccountNo: e.target.value})} />
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Account Number (Optional)</label>
+                   <input 
+                     type="text" 
+                     className="w-full border rounded-lg p-2"
+                     value={formData.bankAccountNo} onChange={e => setFormData({...formData, bankAccountNo: e.target.value})} 
+                   />
                 </div>
 
                 <div>

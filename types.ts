@@ -155,8 +155,8 @@ export interface Employee {
   phone: string;
   email: string;
   salary: number;
-  bankAccountNo: string;
-  bankId: string; // FK
+  bankAccountNo?: string; // Optional
+  bankId?: string; // FK Optional
   dateEmployed: string;
   dateDisengaged?: string;
   lastPlaceOfEmployment?: string;
