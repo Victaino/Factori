@@ -25,7 +25,11 @@ import {
   Percent,
   BarChart4,
   Shield,
-  Key
+  Key,
+  Monitor,
+  Award,
+  DollarSign,
+  Clock
 } from 'lucide-react';
 import { ViewState } from './types';
 
@@ -41,6 +45,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'DASHBOARD', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
   { id: 'PRODUCTION', label: 'Production', icon: <Factory size={20} /> },
   { id: 'INVENTORY', label: 'Inventory Log', icon: <Box size={20} /> },
+  { id: 'ASSETS', label: 'Assets', icon: <Monitor size={20} /> },
   {
     id: 'PROCUREMENT_GROUP',
     label: 'Procurement',
@@ -78,8 +83,10 @@ export const NAV_ITEMS: NavItem[] = [
     icon: <Briefcase size={20} />,
     children: [
       { id: 'EMPLOYEES', label: 'Employees', icon: <UserPlus size={18} /> },
+      { id: 'ATTENDANCE', label: 'Time & Attendance', icon: <Clock size={18} /> },
+      { id: 'PERFORMANCE_REVIEWS', label: 'Performance Reviews', icon: <Award size={18} /> },
+      { id: 'ADJUSTMENTS', label: 'Adjustments (OT/Bonus)', icon: <DollarSign size={18} /> },
       { id: 'PAYROLL', label: 'Payroll', icon: <Banknote size={18} /> },
-      { id: 'DEDUCTIONS', label: 'Deductions', icon: <FileMinus size={18} /> },
     ]
   },
   { id: 'RESOURCES', label: 'Resources', icon: <Settings size={20} /> },

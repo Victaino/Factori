@@ -1,21 +1,49 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { db } from '../services/db';
-import { Payroll, Employee, Deduction } from '../types';
-import { Banknote, Plus, Trash2, Search, X, Pencil, Calendar } from 'lucide-react';
+import { db, PAYROLL_FIELDS_SQL } from '../services/db';
+import { Payroll, Employee, Adjustment, Bank, Attendance } from '../types';
+import { Banknote, Plus, Trash2, Search, X, Pencil, Calendar, Download, AlertTriangle, Terminal, Copy, Clock } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 
 export const PayrollManager: React.FC = () => {
   const { formatCurrency } = useSettings();
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [deductions, setDeductions] = useState<Deduction[]>([]);
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const [banks, setBanks] = useState<Bank[]>([]);
   
+  // Error handling
+  const [dbError, setDbError] = useState<{message: string, sql?: string} | null>(null);
+
+  // Settings for calculation
+  const WORKING_DAYS_PER_MONTH = 22;
+
   useEffect(() => {
     const fetchData = async () => {
-        setPayrolls(await db.getPayroll());
-        setEmployees(await db.getEmployees());
-        setDeductions(await db.getDeductions());
+        try {
+            const [pay, emp, adj, att, bnk] = await Promise.all([
+                db.getPayroll(),
+                db.getEmployees(),
+                db.getAdjustments(),
+                db.getAttendance(),
+                db.getBanks()
+            ]);
+            setPayrolls(pay);
+            setEmployees(emp);
+            setAdjustments(adj);
+            setAttendance(att);
+            setBanks(bnk);
+        } catch (err: any) {
+            console.error("Fetch payroll error", err);
+            // Check for missing columns in payroll table
+            if (err.message && (err.message.includes('salary') || err.message.includes('attendanceDeduction') || err.message.includes('column'))) {
+                setDbError({
+                    message: "Database Update Required: Missing payroll columns (salary, additions, deductions, attendanceDeduction).",
+                    sql: PAYROLL_FIELDS_SQL
+                });
+            }
+        }
     };
     fetchData();
   }, []);
@@ -29,57 +57,100 @@ export const PayrollManager: React.FC = () => {
 
   const [formData, setFormData] = useState({
     employeeId: '',
-    deductionId: '',
+    salary: 0,
+    additions: 0,
+    deductions: 0,
+    attendanceDeduction: 0,
     amountPayable: 0,
     date: new Date().toISOString().split('T')[0]
   });
 
-  const handleEmployeeChange = (empId: string) => {
-    const emp = employees.find(e => e.id === empId);
-    const ded = deductions.find(d => d.id === formData.deductionId);
-    
-    // Calculate payable if possible
-    let payable = 0;
-    if (emp) {
-        payable = emp.salary;
-        if (ded) payable -= ded.amount;
-    }
-    
-    setFormData(prev => ({ ...prev, employeeId: empId, amountPayable: payable }));
+  const calculatePay = (empId: string, dateStr: string) => {
+      const emp = employees.find(e => e.id === empId);
+      if (!emp) return { salary: 0, additions: 0, deductions: 0, attendanceDeduction: 0, amountPayable: 0 };
+
+      // Filter adjustments for the selected month/year
+      const formDate = new Date(dateStr);
+      const targetMonth = formDate.getMonth();
+      const targetYear = formDate.getFullYear();
+
+      const empAdjustments = adjustments.filter(a => {
+          const adjDate = new Date(a.date);
+          return a.employeeId === empId && 
+                 adjDate.getMonth() === targetMonth && 
+                 adjDate.getFullYear() === targetYear;
+      });
+
+      // Calculate Attendance Deduction
+      // Count unique days present for this employee in this month
+      const daysPresent = new Set(attendance.filter(a => {
+          const attDate = new Date(a.date);
+          return a.employeeId === empId &&
+                 attDate.getMonth() === targetMonth &&
+                 attDate.getFullYear() === targetYear;
+      }).map(a => a.date)).size; // Use Set size for unique days
+
+      const missedDays = Math.max(0, WORKING_DAYS_PER_MONTH - daysPresent);
+      const dailyRate = emp.salary / WORKING_DAYS_PER_MONTH;
+      const attDeduction = missedDays * dailyRate;
+
+      const salary = emp.salary;
+      const additions = empAdjustments
+        .filter(a => a.type === 'Bonus' || a.type === 'Overtime')
+        .reduce((sum, a) => sum + a.amount, 0);
+      
+      const deductions = empAdjustments
+        .filter(a => a.type === 'Deduction')
+        .reduce((sum, a) => sum + a.amount, 0);
+
+      const amountPayable = Math.max(0, salary + additions - deductions - attDeduction);
+
+      return { salary, additions, deductions, attendanceDeduction: attDeduction, amountPayable };
   };
 
-  const handleDeductionChange = (dedId: string) => {
-    const emp = employees.find(e => e.id === formData.employeeId);
-    const ded = deductions.find(d => d.id === dedId);
+  const updateCalculations = (empId: string, dateStr: string) => {
+      const calcs = calculatePay(empId, dateStr);
+      setFormData(prev => ({
+          ...prev,
+          employeeId: empId,
+          date: dateStr,
+          ...calcs
+      }));
+  };
 
-    let payable = formData.amountPayable;
-    if (emp) {
-        payable = emp.salary;
-        if (ded) payable -= ded.amount;
-    }
-    // If clearing deduction
-    if (!ded && emp) payable = emp.salary;
+  const handleEmployeeChange = (empId: string) => {
+    updateCalculations(empId, formData.date);
+  };
 
-    setFormData(prev => ({ ...prev, deductionId: dedId, amountPayable: payable }));
+  const handleDateChange = (dateStr: string) => {
+    updateCalculations(formData.employeeId, dateStr);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingId) {
-        await db.updatePayroll(editingId, formData);
-        setPayrolls(payrolls.map(p => p.id === editingId ? { ...p, ...formData } : p));
-    } else {
-        const added = await db.addPayroll(formData);
-        setPayrolls([added, ...payrolls]); // Newest first
+    setDbError(null);
+    try {
+        if (editingId) {
+            await db.updatePayroll(editingId, formData);
+            setPayrolls(payrolls.map(p => p.id === editingId ? { ...p, ...formData } : p));
+        } else {
+            const added = await db.addPayroll(formData);
+            setPayrolls([added, ...payrolls]);
+        }
+        setIsModalOpen(false);
+        resetForm();
+    } catch (err: any) {
+        console.error("Save payroll failed", err);
+        setDbError({
+            message: err.message || "Failed to save record.",
+            sql: (err.message.includes('salary') || err.message.includes('column')) ? PAYROLL_FIELDS_SQL : undefined
+        });
     }
-    
-    setIsModalOpen(false);
-    resetForm();
   };
 
   const resetForm = () => {
       setFormData({
-        employeeId: '', deductionId: '', amountPayable: 0, 
+        employeeId: '', salary: 0, additions: 0, deductions: 0, attendanceDeduction: 0, amountPayable: 0, 
         date: new Date().toISOString().split('T')[0]
       });
       setEditingId(null);
@@ -88,7 +159,10 @@ export const PayrollManager: React.FC = () => {
   const handleEdit = (pay: Payroll) => {
       setFormData({
           employeeId: pay.employeeId,
-          deductionId: pay.deductionId,
+          salary: pay.salary || 0,
+          additions: pay.additions || 0,
+          deductions: pay.deductions || 0,
+          attendanceDeduction: pay.attendanceDeduction || 0,
           amountPayable: pay.amountPayable,
           date: pay.date
       });
@@ -103,8 +177,37 @@ export const PayrollManager: React.FC = () => {
     }
   };
 
+  const handleExportCsv = () => {
+      const headers = ['Employee Name', 'Account Number', 'Sort Code', 'Amount Payable'];
+      
+      const rows = filteredPayrolls.map(pay => {
+          const emp = employees.find(e => e.id === pay.employeeId);
+          const bank = banks.find(b => b.id === emp?.bankId);
+          
+          const sortCode = bank?.sortCode ? `="${bank.sortCode}"` : '';
+          const accountNo = emp?.bankAccountNo ? `="${emp.bankAccountNo}"` : '';
+
+          return [
+              `"${emp?.name || 'Unknown'}"`,
+              accountNo,
+              sortCode,
+              pay.amountPayable.toFixed(2)
+          ];
+      });
+
+      const csvContent = "data:text/csv;charset=utf-8," 
+        + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+      
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `payroll_export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  };
+
   const getEmployeeName = (id: string) => employees.find(e => e.id === id)?.name || 'Unknown';
-  const getDeductionDesc = (id: string) => deductions.find(d => d.id === id)?.description || 'None';
 
   const filteredPayrolls = useMemo(() => {
     return payrolls.filter(p => {
@@ -126,12 +229,20 @@ export const PayrollManager: React.FC = () => {
         <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
           <Banknote className="text-green-600" /> Payroll
         </h2>
-        <button 
-          onClick={() => { resetForm(); setIsModalOpen(true); }}
-          className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700"
-        >
-          <Plus size={20} /> New Payment
-        </button>
+        <div className="flex gap-2">
+            <button 
+                onClick={handleExportCsv}
+                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-gray-200"
+            >
+                <Download size={20} /> Export Excel
+            </button>
+            <button 
+            onClick={() => { resetForm(); setIsModalOpen(true); }}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700"
+            >
+            <Plus size={20} /> New Payment
+            </button>
+        </div>
       </div>
 
        {/* Filter Toolbar */}
@@ -173,8 +284,8 @@ export const PayrollManager: React.FC = () => {
             <tr>
               <th className="p-4 font-semibold text-gray-600">Date</th>
               <th className="p-4 font-semibold text-gray-600">Employee</th>
-              <th className="p-4 font-semibold text-gray-600">Deduction</th>
-              <th className="p-4 font-semibold text-gray-600">Amount Payable</th>
+              <th className="p-4 font-semibold text-gray-600">Base Salary</th>
+              <th className="p-4 font-semibold text-gray-600">Net Payable</th>
               <th className="p-4 text-right font-semibold text-gray-600">Actions</th>
             </tr>
           </thead>
@@ -183,8 +294,19 @@ export const PayrollManager: React.FC = () => {
               <tr key={pay.id} className="hover:bg-gray-50">
                 <td className="p-4 text-gray-800">{pay.date}</td>
                 <td className="p-4 text-gray-800 font-medium">{getEmployeeName(pay.employeeId)}</td>
-                <td className="p-4 text-gray-600">{getDeductionDesc(pay.deductionId)}</td>
-                <td className="p-4 text-green-600 font-bold">{formatCurrency(pay.amountPayable)}</td>
+                <td className="p-4 text-gray-500">
+                    {pay.salary ? formatCurrency(pay.salary) : '-'}
+                </td>
+                <td className="p-4 text-green-600 font-bold">
+                    <div className="flex flex-col">
+                        <span>{formatCurrency(pay.amountPayable)}</span>
+                        <div className="text-[10px] text-gray-400 font-normal flex gap-1">
+                            {pay.additions > 0 && <span>+{pay.additions}</span>}
+                            {pay.deductions > 0 && <span className="text-red-300">-{pay.deductions}</span>}
+                            {pay.attendanceDeduction > 0 && <span className="text-orange-300">-{Math.round(pay.attendanceDeduction)} (Abs)</span>}
+                        </div>
+                    </div>
+                </td>
                 <td className="p-4 text-right flex justify-end gap-2">
                   <button onClick={() => handleEdit(pay)} className="text-blue-400 hover:text-blue-600">
                     <Pencil size={18} />
@@ -213,34 +335,80 @@ export const PayrollManager: React.FC = () => {
               <h3 className="text-xl font-bold">{editingId ? 'Edit Payroll Record' : 'Process Payroll'}</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">&times;</button>
             </div>
+            
+            {dbError && (
+                <div className="mx-6 mt-4 bg-red-50 border border-red-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="text-red-600 flex-shrink-0 mt-0.5" size={20} />
+                        <div className="flex-1">
+                            <h3 className="font-bold text-red-800">Database Update Required</h3>
+                            <p className="text-sm text-red-700 mt-1">{dbError.message}</p>
+                            
+                            {dbError.sql && (
+                                <div className="mt-3 bg-gray-900 rounded-lg p-3 overflow-hidden">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs text-gray-400 flex items-center gap-1"><Terminal size={12}/> SQL Fix</span>
+                                        <button 
+                                        onClick={() => navigator.clipboard.writeText(dbError.sql!)}
+                                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                                        >
+                                            <Copy size={12} /> Copy
+                                        </button>
+                                    </div>
+                                    <code className="text-xs font-mono text-green-400 block break-all">
+                                        {dbError.sql}
+                                    </code>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                 <input required type="date" className="w-full border rounded-lg p-2"
-                  value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+                  value={formData.date} onChange={e => handleDateChange(e.target.value)} />
+                <p className="text-xs text-gray-500 mt-1">Attendance & Adjustments are calculated for this month.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Employee</label>
                 <select required className="w-full border rounded-lg p-2"
                   value={formData.employeeId} onChange={e => handleEmployeeChange(e.target.value)}>
                   <option value="">Select Employee</option>
-                  {employees.map(e => <option key={e.id} value={e.id}>{e.name} ({formatCurrency(e.salary)})</option>)}
+                  {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Deduction</label>
-                <select className="w-full border rounded-lg p-2"
-                  value={formData.deductionId} onChange={e => handleDeductionChange(e.target.value)}>
-                  <option value="">None</option>
-                  {deductions.map(d => <option key={d.id} value={d.id}>{d.description} (-{formatCurrency(d.amount)})</option>)}
-                </select>
+
+              {/* Breakdown Section */}
+              <div className="bg-gray-50 p-4 rounded-lg space-y-2 border text-sm">
+                  <div className="flex justify-between text-gray-600">
+                      <span>Base Salary:</span>
+                      <span>{formatCurrency(formData.salary)}</span>
+                  </div>
+                  <div className="flex justify-between text-green-600">
+                      <span>+ Additions (Bonus/OT):</span>
+                      <span>{formatCurrency(formData.additions)}</span>
+                  </div>
+                  <div className="flex justify-between text-red-600">
+                      <span>- Deductions (Misc):</span>
+                      <span>{formatCurrency(formData.deductions)}</span>
+                  </div>
+                  
+                  {formData.attendanceDeduction > 0 && (
+                      <div className="flex justify-between text-orange-600">
+                          <span className="flex items-center gap-1"><Clock size={12}/> - Attendance (Missed Days):</span>
+                          <span>{formatCurrency(formData.attendanceDeduction)}</span>
+                      </div>
+                  )}
+
+                  <div className="flex justify-between font-bold text-lg text-gray-800 border-t pt-2 mt-2">
+                      <span>Net Payable:</span>
+                      <span>{formatCurrency(formData.amountPayable)}</span>
+                  </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount Payable</label>
-                <input required type="number" readOnly className="w-full border rounded-lg p-2 bg-gray-100"
-                  value={formData.amountPayable} />
-                <p className="text-xs text-gray-500 mt-1">Calculated as Salary - Deduction</p>
-              </div>
+
               <button type="submit" className="w-full bg-green-600 text-white py-2 rounded-lg mt-4 hover:bg-green-700">
                 {editingId ? 'Update Record' : 'Confirm Payment'}
               </button>

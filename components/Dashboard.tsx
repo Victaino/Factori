@@ -1,3 +1,4 @@
+
 import React, { useMemo, useEffect, useState } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, Cell
@@ -325,7 +326,7 @@ export const Dashboard: React.FC = () => {
                 <YAxis axisLine={false} tickLine={false} />
                 <Tooltip 
                     cursor={{fill: 'transparent'}}
-                    formatter={(value: any) => formatCurrency(Number(value))}
+                    formatter={(value: any) => [formatCurrency(Number(value)), 'Amount']}
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 />
                 <Bar dataKey="amount" fill="#3b82f6" radius={[4, 4, 0, 0]}>

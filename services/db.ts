@@ -2,7 +2,8 @@
 import { supabase } from './supabase';
 import { 
   Plant, Operator, Material, Product, InventoryItem, Production, IncidentReport, Customer, Supplier, Expense, Sale,
-  Bank, Employee, Deduction, Payroll, PurchaseOrder, SalesOrder, Tax, User, Role, OrganizationSettings
+  Bank, Employee, Payroll, PurchaseOrder, SalesOrder, Tax, User, Role, OrganizationSettings, Asset, PerformanceReview, Adjustment,
+  Deduction, Attendance
 } from '../types';
 
 // Helper to generate IDs
@@ -43,8 +44,92 @@ export const EMPLOYEE_FIELDS_SQL = `
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS "lastPlaceOfEmployment" text;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS "guarantorName" text;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS "guarantorPhone" text;
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS "pinCode" text;
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS "isBiometricRegistered" boolean DEFAULT false;
 NOTIFY pgrst, 'reload config';
 `;
+
+export const PERFORMANCE_SQL = `
+-- Create Performance Reviews Table
+create table if not exists performance_reviews (
+  id text primary key,
+  "employeeId" text, -- We don't strictly enforce FK to allow soft deletes of employees or manual data
+  "reviewDate" text,
+  reviewer text,
+  rating numeric,
+  strengths text,
+  improvements text,
+  goals text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+NOTIFY pgrst, 'reload config';
+`;
+
+export const ADJUSTMENT_SQL = `
+-- Create Adjustments Table
+create table if not exists adjustments (
+  id text primary key,
+  "employeeId" text,
+  type text, -- 'Overtime', 'Bonus', 'Deduction'
+  amount numeric,
+  date text,
+  description text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+NOTIFY pgrst, 'reload config';
+`;
+
+export const ATTENDANCE_SQL = `
+-- Create Attendance Table
+create table if not exists attendance (
+  id text primary key,
+  "employeeId" text,
+  date text,
+  "timeIn" text,
+  "timeOut" text,
+  method text default 'Manual', -- 'Manual', 'Biometric'
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+NOTIFY pgrst, 'reload config';
+`;
+
+export const ASSETS_SQL = `
+-- Create Assets Table
+create table if not exists assets (
+  id text primary key,
+  item text not null,
+  make text,
+  type text,
+  "serialNumber" text,
+  color text,
+  qty numeric default 0,
+  "unitPrice" numeric default 0,
+  total numeric default 0,
+  remark text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+NOTIFY pgrst, 'reload config';
+`;
+
+export const PAYROLL_FIELDS_SQL = `
+-- Update Payroll Table with breakdown fields
+ALTER TABLE payroll ADD COLUMN IF NOT EXISTS salary numeric DEFAULT 0;
+ALTER TABLE payroll ADD COLUMN IF NOT EXISTS additions numeric DEFAULT 0;
+ALTER TABLE payroll ADD COLUMN IF NOT EXISTS deductions numeric DEFAULT 0;
+ALTER TABLE payroll ADD COLUMN IF NOT EXISTS "attendanceDeduction" numeric DEFAULT 0;
+NOTIFY pgrst, 'reload config';
+`;
+
+// Define comprehensive permissions list to keep Admin in sync with new features
+const ALL_ADMIN_PERMISSIONS = [
+  "DASHBOARD", "PRODUCTION", "INVENTORY", "MATERIALS", "PRODUCTS", "ASSETS", 
+  "PROCUREMENT_GROUP", "SUPPLIERS", "PURCHASE_ORDERS", "EXPENSES", 
+  "SALES_BILLING_GROUP", "SALES", "SALES_ORDERS", "INVOICES", "CUSTOMERS", 
+  "FINANCE_GROUP", "BANKS", "TAXES", "PROFIT_LOSS", 
+  "HR_GROUP", "EMPLOYEES", "PERFORMANCE_REVIEWS", "ADJUSTMENTS", "PAYROLL", "ATTENDANCE", 
+  "RESOURCES", "INCIDENTS", 
+  "SETTINGS_GROUP", "SETTINGS", "USERS", "ROLES", "DEDUCTIONS"
+];
 
 class DatabaseService {
   
@@ -213,7 +298,7 @@ class DatabaseService {
                  role: 'admin',
                  lastLogin: new Date().toISOString()
              };
-             // Ensure Admin Role exists
+             // Ensure Admin Role exists and has latest permissions
              await this.seedAdminRole();
              // Try to seed user silently
              try {
@@ -222,7 +307,7 @@ class DatabaseService {
                  // Ignore if already exists
              }
              // Return admin with ALL privileges (handled by permissions or logic)
-             return { user: adminUser, permissions: ['ALL'] };
+             return { user: adminUser, permissions: ALL_ADMIN_PERMISSIONS };
         }
         return null;
     }
@@ -230,31 +315,36 @@ class DatabaseService {
     // Update last login
     await this.update('app_users', data.id, { lastLogin: new Date().toISOString() });
     
+    // AUTO-HEAL: If user is admin, force update their permissions to the latest codebase definitions
+    // This ensures new features (like Assets, Adjustments) appear immediately after deployment
+    if (data.role === 'admin') {
+        await this.seedAdminRole();
+    }
+
     // Fetch Permissions for the user's role
     const { data: roleData } = await supabase.from('roles').select('permissions').eq('name', data.role).single();
     
     const permissions = roleData?.permissions || [];
 
-    // Fallback: If it's the specific admin user, ensure they have access even if role table fails
-    if (data.username === 'admin' && permissions.length === 0) {
-        return { user: data as User, permissions: ['ALL'] };
-    }
-
     return { user: data as User, permissions };
   }
 
   async seedAdminRole() {
-      // Create admin role if it doesn't exist
+      // Create or Update admin role
       const { data } = await supabase.from('roles').select('*').eq('name', 'admin').single();
+      
       if (!data) {
           // Grant access to basic views + settings
-          const allPerms = ["DASHBOARD", "PRODUCTION", "INVENTORY", "MATERIALS", "PRODUCTS", "PROCUREMENT_GROUP", "SUPPLIERS", "PURCHASE_ORDERS", "EXPENSES", "SALES_BILLING_GROUP", "SALES", "SALES_ORDERS", "INVOICES", "CUSTOMERS", "FINANCE_GROUP", "BANKS", "TAXES", "PROFIT_LOSS", "HR_GROUP", "EMPLOYEES", "PAYROLL", "DEDUCTIONS", "RESOURCES", "INCIDENTS", "SETTINGS_GROUP", "SETTINGS", "USERS", "ROLES"];
           await this.insert('roles', {
               id: generateId(),
               name: 'admin',
               description: 'System Administrator',
-              permissions: allPerms
+              permissions: ALL_ADMIN_PERMISSIONS
           });
+      } else {
+          // ALWAYS update admin permissions to match the latest code definition
+          // This is critical for development when adding new features
+          await this.update('roles', data.id, { permissions: ALL_ADMIN_PERMISSIONS });
       }
   }
 
@@ -395,6 +485,21 @@ class DatabaseService {
       const { error } = await supabase.from('inventory').delete().eq('productId', id);
       if (error) console.error(`Error deleting inventory for product ${id}:`, error);
   }
+
+  // --- Assets ---
+  async getAssets(): Promise<Asset[]> { return this.fetchTable('assets'); }
+  async addAsset(data: Omit<Asset, 'id'>): Promise<Asset> {
+    const total = data.qty * data.unitPrice;
+    return (await this.insert('assets', { ...data, id: generateId(), total }))!;
+  }
+  async updateAsset(id: string, updates: Partial<Asset>) {
+    let total = updates.total;
+    if (updates.qty !== undefined && updates.unitPrice !== undefined) {
+         total = updates.qty * updates.unitPrice;
+    }
+    await this.update('assets', id, { ...updates, total });
+  }
+  async deleteAsset(id: string) { await this.delete('assets', id); }
 
   // --- Inventory ---
   async getInventory(): Promise<InventoryItem[]> { return this.fetchTable('inventory'); }
@@ -562,6 +667,22 @@ class DatabaseService {
   async updateEmployee(id: string, updates: Partial<Employee>) { await this.update('employees', id, updates); }
   async deleteEmployee(id: string) { await this.delete('employees', id); }
 
+  // --- Performance Reviews ---
+  async getPerformanceReviews(): Promise<PerformanceReview[]> { return this.fetchTable('performance_reviews'); }
+  async addPerformanceReview(data: Omit<PerformanceReview, 'id'>): Promise<PerformanceReview> {
+    return (await this.insert('performance_reviews', { ...data, id: generateId() }))!;
+  }
+  async updatePerformanceReview(id: string, updates: Partial<PerformanceReview>) { await this.update('performance_reviews', id, updates); }
+  async deletePerformanceReview(id: string) { await this.delete('performance_reviews', id); }
+
+  // --- Adjustments (Overtime, Bonus, Deductions) ---
+  async getAdjustments(): Promise<Adjustment[]> { return this.fetchTable('adjustments'); }
+  async addAdjustment(data: Omit<Adjustment, 'id'>): Promise<Adjustment> {
+    return (await this.insert('adjustments', { ...data, id: generateId() }))!;
+  }
+  async updateAdjustment(id: string, updates: Partial<Adjustment>) { await this.update('adjustments', id, updates); }
+  async deleteAdjustment(id: string) { await this.delete('adjustments', id); }
+
   // --- Deductions ---
   async getDeductions(): Promise<Deduction[]> { return this.fetchTable('deductions'); }
   async addDeduction(data: Omit<Deduction, 'id'>): Promise<Deduction> {
@@ -577,6 +698,56 @@ class DatabaseService {
   }
   async updatePayroll(id: string, updates: Partial<Payroll>) { await this.update('payroll', id, updates); }
   async deletePayroll(id: string) { await this.delete('payroll', id); }
+
+  // --- Attendance ---
+  async getAttendance(): Promise<Attendance[]> { return this.fetchTable('attendance'); }
+  
+  async clockIn(employeeId: string, method: 'Manual' | 'Biometric' = 'Manual'): Promise<Attendance> {
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      
+      // Check if already clocked in
+      const { data: existing } = await supabase.from('attendance')
+        .select('*')
+        .eq('employeeId', employeeId)
+        .eq('date', today)
+        .single();
+        
+      if (existing) {
+          throw new Error("Already clocked in for today.");
+      }
+
+      return (await this.insert('attendance', {
+          id: generateId(),
+          employeeId,
+          date: today,
+          timeIn: now,
+          method
+      }))!;
+  }
+
+  async clockOut(employeeId: string): Promise<Attendance> {
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+      // Find today's record
+      const { data: existing } = await supabase.from('attendance')
+        .select('*')
+        .eq('employeeId', employeeId)
+        .eq('date', today)
+        .single();
+
+      if (!existing) {
+          throw new Error("No clock-in record found for today.");
+      }
+      
+      if (existing.timeOut) {
+          throw new Error("Already clocked out.");
+      }
+
+      await this.update('attendance', existing.id, { timeOut: now });
+      return { ...existing, timeOut: now };
+  }
 }
 
 export const db = new DatabaseService();

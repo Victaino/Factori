@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
 import { Sale, Expense, Payroll } from '../types';
 import { useSettings } from '../contexts/SettingsContext';
 import { BarChart4, TrendingUp, TrendingDown, Printer, Calendar, Filter } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
 
 type DateFilter = 'CUSTOM' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR';
 
@@ -273,10 +272,10 @@ export const ProfitLossManager: React.FC = () => {
                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
                             <XAxis dataKey="name" axisLine={false} tickLine={false} />
                             <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => `${val/1000}k`} />
-                            <Tooltip formatter={(value: number) => formatCurrency(value)} cursor={{fill: 'transparent'}} />
+                            <Tooltip formatter={(value: any) => formatCurrency(Number(value))} cursor={{fill: 'transparent'}} />
                             <Bar dataKey="amount" fill="#3b82f6" radius={[4, 4, 0, 0]}>
                                 {chartData.map((entry, index) => (
-                                    <cell key={`cell-${index}`} fill={index === 0 ? '#10b981' : '#ef4444'} />
+                                    <Cell key={`cell-${index}`} fill={index === 0 ? '#10b981' : '#ef4444'} />
                                 ))}
                             </Bar>
                         </BarChart>

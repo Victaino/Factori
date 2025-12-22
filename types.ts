@@ -36,6 +36,19 @@ export interface InventoryItem {
   lowStockThreshold?: number; // Alert trigger
 }
 
+export interface Asset {
+  id: string;
+  item: string;
+  make: string;
+  type: string;
+  serialNumber: string;
+  color: string;
+  qty: number;
+  unitPrice: number;
+  total: number; // Derived: qty * unitPrice
+  remark: string;
+}
+
 export interface Production {
   id: string;
   date: string; // ISO Date string
@@ -162,6 +175,37 @@ export interface Employee {
   lastPlaceOfEmployment?: string;
   guarantorName?: string;
   guarantorPhone?: string;
+  pinCode?: string; // For attendance kiosk
+  isBiometricRegistered?: boolean; // New field for fingerprint enrollment
+}
+
+export interface Attendance {
+  id: string;
+  employeeId: string;
+  date: string; // YYYY-MM-DD
+  timeIn: string; // HH:mm
+  timeOut?: string; // HH:mm
+  method: 'Manual' | 'Biometric';
+}
+
+export interface PerformanceReview {
+  id: string;
+  employeeId: string;
+  reviewDate: string;
+  reviewer: string;
+  rating: number; // 1 to 5
+  strengths: string;
+  improvements: string;
+  goals: string;
+}
+
+export interface Adjustment {
+  id: string;
+  employeeId: string;
+  type: 'Overtime' | 'Bonus' | 'Deduction';
+  amount: number;
+  date: string;
+  description: string;
 }
 
 export interface Deduction {
@@ -173,7 +217,10 @@ export interface Deduction {
 export interface Payroll {
   id: string;
   employeeId: string; // FK
-  deductionId: string; // FK
+  salary: number; // Base salary snapshot
+  additions: number; // Sum of OT and Bonus
+  deductions: number; // Sum of Deductions
+  attendanceDeduction: number; // Deduction calculated from missed days
   amountPayable: number;
   date: string; // Payment date
 }
@@ -232,6 +279,7 @@ export type ViewState =
   | 'INVENTORY' 
   | 'MATERIALS' 
   | 'PRODUCTS' 
+  | 'ASSETS'
   | 'INCIDENTS' 
   | 'RESOURCES'
   | 'CUSTOMERS'
@@ -242,10 +290,12 @@ export type ViewState =
   | 'SALES'
   | 'INVOICES'
   | 'EMPLOYEES'
+  | 'ATTENDANCE'
+  | 'PERFORMANCE_REVIEWS'
+  | 'ADJUSTMENTS'
   | 'BANKS'
   | 'TAXES'
   | 'PAYROLL'
-  | 'DEDUCTIONS'
   | 'PROFIT_LOSS'
   | 'SETTINGS'
   | 'USERS'
