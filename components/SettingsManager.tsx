@@ -354,7 +354,7 @@ export const SettingsManager: React.FC = () => {
                             type="number"
                             step="0.1"
                             className="w-full border rounded-lg p-3"
-                            value={orgForm.taxRate}
+                            value={isNaN(orgForm.taxRate) ? '' : orgForm.taxRate}
                             onChange={e => setOrgForm({ ...orgForm, taxRate: parseFloat(e.target.value) })}
                           />
                       </div>

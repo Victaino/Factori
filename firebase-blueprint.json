@@ -1,0 +1,485 @@
+{
+  "entities": {
+    "Plant": {
+      "title": "Plant",
+      "description": "A production plant facility",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Operator": {
+      "title": "Operator",
+      "description": "A machine or station operator",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Material": {
+      "title": "Material",
+      "description": "Raw materials inventory item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "quantity": { "type": "number" },
+        "amount": { "type": "number" },
+        "trackInventory": { "type": "boolean" }
+      },
+      "required": ["id", "name", "price", "quantity", "amount"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Finished product definition",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "quantity": { "type": "number" },
+        "amount": { "type": "number" },
+        "imageUrl": { "type": "string" },
+        "trackInventory": { "type": "boolean" }
+      },
+      "required": ["id", "name", "price", "quantity", "amount"]
+    },
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Inventory storage tracking records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "price": { "type": "number" },
+        "lowStockThreshold": { "type": "number" }
+      },
+      "required": ["id", "productId", "quantity", "price"]
+    },
+    "Asset": {
+      "title": "Asset",
+      "description": "Fixed asset registry item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "item": { "type": "string" },
+        "make": { "type": "string" },
+        "type": { "type": "string" },
+        "serialNumber": { "type": "string" },
+        "color": { "type": "string" },
+        "qty": { "type": "number" },
+        "unitPrice": { "type": "number" },
+        "total": { "type": "number" },
+        "remark": { "type": "string" }
+      },
+      "required": ["id", "item", "qty", "unitPrice", "total"]
+    },
+    "Production": {
+      "title": "Production",
+      "description": "Production log entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "productId": { "type": "string" },
+        "plantId": { "type": "string" },
+        "operatorId": { "type": "string" },
+        "materialsUsed": { "type": "array" },
+        "outputTonnage": { "type": "number" },
+        "outputUnit": { "type": "string" },
+        "timeStart": { "type": "string" },
+        "timeStop": { "type": "string" },
+        "duration": { "type": "number" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "date", "productId", "plantId", "operatorId", "materialsUsed", "outputTonnage", "timeStart", "timeStop", "duration"]
+    },
+    "IncidentReport": {
+      "title": "IncidentReport",
+      "description": "Incidents logged during production",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productionId": { "type": "string" },
+        "description": { "type": "string" },
+        "remark": { "type": "string" },
+        "date": { "type": "string" }
+      },
+      "required": ["id", "productionId", "description", "remark"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Buyer of finished goods",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "contactPerson": { "type": "string" }
+      },
+      "required": ["id", "name", "phone"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Vendor of raw materials",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "contactPerson": { "type": "string" }
+      },
+      "required": ["id", "name", "phone"]
+    },
+    "Tax": {
+      "title": "Tax",
+      "description": "Tax definitions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "rate": { "type": "number" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "name", "rate"]
+    },
+    "PurchaseOrder": {
+      "title": "PurchaseOrder",
+      "description": "Purchase order issued to a supplier",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "orderDate": { "type": "string" },
+        "expectedDeliveryDate": { "type": "string" },
+        "receivedDate": { "type": "string" },
+        "taxRate": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "supplierId", "orderDate", "expectedDeliveryDate", "totalAmount", "status"]
+    },
+    "SalesOrder": {
+      "title": "SalesOrder",
+      "description": "Sales order from a customer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerId": { "type": "string" },
+        "productId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unitPrice": { "type": "number" },
+        "orderDate": { "type": "string" },
+        "deliveryDate": { "type": "string" },
+        "receivedDate": { "type": "string" },
+        "taxRate": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "customerId", "productId", "quantity", "unitPrice", "orderDate", "deliveryDate", "totalAmount", "status"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Operating expense recording",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "items": { "type": "string" },
+        "quantity": { "type": "number" },
+        "price": { "type": "number" },
+        "taxRate": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "amount": { "type": "number" },
+        "paid": { "type": "number" },
+        "balance": { "type": "number" },
+        "date": { "type": "string" }
+      },
+      "required": ["id", "supplierId", "items", "quantity", "price", "amount", "paid", "balance", "date"]
+    },
+    "Sale": {
+      "title": "Sale",
+      "description": "Sales invoice transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerId": { "type": "string" },
+        "productId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "price": { "type": "number" },
+        "taxRate": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "amount": { "type": "number" },
+        "paid": { "type": "number" },
+        "balance": { "type": "number" },
+        "date": { "type": "string" }
+      },
+      "required": ["id", "customerId", "productId", "quantity", "price", "amount", "paid", "balance", "date"]
+    },
+    "Bank": {
+      "title": "Bank",
+      "description": "Bank account registration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "sortCode": { "type": "string" }
+      },
+      "required": ["id", "name", "sortCode"]
+    },
+    "Employee": {
+      "title": "Employee",
+      "description": "HR Employee profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "position": { "type": "string" },
+        "photo": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "salary": { "type": "number" },
+        "bankAccountNo": { "type": "string" },
+        "bankId": { "type": "string" },
+        "dateEmployed": { "type": "string" },
+        "dateDisengaged": { "type": "string" },
+        "lastPlaceOfEmployment": { "type": "string" },
+        "guarantorName": { "type": "string" },
+        "guarantorPhone": { "type": "string" },
+        "pinCode": { "type": "string" },
+        "isBiometricRegistered": { "type": "boolean" }
+      },
+      "required": ["id", "name", "position", "phone", "salary", "dateEmployed"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Employee attendance check-in and check-out logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "date": { "type": "string" },
+        "timeIn": { "type": "string" },
+        "timeOut": { "type": "string" },
+        "method": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "date", "timeIn", "method"]
+    },
+    "PerformanceReview": {
+      "title": "PerformanceReview",
+      "description": "Employee performance review records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "reviewDate": { "type": "string" },
+        "reviewer": { "type": "string" },
+        "rating": { "type": "number" },
+        "strengths": { "type": "string" },
+        "improvements": { "type": "string" },
+        "goals": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "reviewDate", "reviewer", "rating", "strengths", "improvements", "goals"]
+    },
+    "Adjustment": {
+      "title": "Adjustment",
+      "description": "Payroll adjustment such as bonuses, overtime, or custom deductions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "type": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "type", "amount", "date", "description"]
+    },
+    "Deduction": {
+      "title": "Deduction",
+      "description": "Static deduction setups",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" }
+      },
+      "required": ["id", "description", "amount"]
+    },
+    "Payroll": {
+      "title": "Payroll",
+      "description": "Employee monthly payroll sheet details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "salary": { "type": "number" },
+        "additions": { "type": "number" },
+        "deductions": { "type": "number" },
+        "attendanceDeduction": { "type": "number" },
+        "amountPayable": { "type": "number" },
+        "date": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "salary", "additions", "deductions", "attendanceDeduction", "amountPayable", "date"]
+    },
+    "Role": {
+      "title": "Role",
+      "description": "Security roles with view permission definitions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "permissions": { "type": "array" }
+      },
+      "required": ["id", "name", "permissions"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Factori application user profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "lastLogin": { "type": "string" }
+      },
+      "required": ["id", "username", "name", "role"]
+    },
+    "OrganizationSettings": {
+      "title": "OrganizationSettings",
+      "description": "Global organization and dashboard layout settings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyName": { "type": "string" },
+        "companyAddress": { "type": "string" },
+        "companyTin": { "type": "string" },
+        "companyLogo": { "type": "string" },
+        "taxName": { "type": "string" },
+        "taxRate": { "type": "number" },
+        "baseCurrency": { "type": "string" },
+        "defaultTheme": { "type": "string" },
+        "defaultColorTheme": { "type": "string" },
+        "dashboardConfig": { "type": "object" }
+      },
+      "required": ["id", "companyName", "baseCurrency"]
+    }
+  },
+  "firestore": {
+    "plants": {
+      "schema": "Plant",
+      "description": "Production plant facilities"
+    },
+    "operators": {
+      "schema": "Operator",
+      "description": "Plant operators"
+    },
+    "materials": {
+      "schema": "Material",
+      "description": "Raw material items and quantities"
+    },
+    "products": {
+      "schema": "Product",
+      "description": "Products definitions"
+    },
+    "inventory": {
+      "schema": "InventoryItem",
+      "description": "Stock inventory items"
+    },
+    "assets": {
+      "schema": "Asset",
+      "description": "Fixed asset registry items"
+    },
+    "production": {
+      "schema": "Production",
+      "description": "Production logs tracking output items and raw material consumption"
+    },
+    "incidents": {
+      "schema": "IncidentReport",
+      "description": "Plant and production incident reports"
+    },
+    "customers": {
+      "schema": "Customer",
+      "description": "Clients of the factory"
+    },
+    "suppliers": {
+      "schema": "Supplier",
+      "description": "Suppliers of raw materials"
+    },
+    "taxes": {
+      "schema": "Tax",
+      "description": "Tax structure definitions"
+    },
+    "purchase_orders": {
+      "schema": "PurchaseOrder",
+      "description": "Procurement orders placed with suppliers"
+    },
+    "sales_orders": {
+      "schema": "SalesOrder",
+      "description": "Customer orders made for finished products"
+    },
+    "expenses": {
+      "schema": "Expense",
+      "description": "Operations and raw materials purchases"
+    },
+    "sales": {
+      "schema": "Sale",
+      "description": "Fulfilled sales transactions"
+    },
+    "banks": {
+      "schema": "Bank",
+      "description": "Corporate or payroll bank accounts"
+    },
+    "employees": {
+      "schema": "Employee",
+      "description": "Enterprise employee database profiles"
+    },
+    "attendance": {
+      "schema": "Attendance",
+      "description": "Clocking logs for attendance kiosks"
+    },
+    "performance_reviews": {
+      "schema": "PerformanceReview",
+      "description": "Individual employee performance assessments"
+    },
+    "adjustments": {
+      "schema": "Adjustment",
+      "description": "Bonuses, deductions, and overtime adjustments on payroll"
+    },
+    "deductions": {
+      "schema": "Deduction",
+      "description": "Customized static monthly tax/fee deductions"
+    },
+    "payroll": {
+      "schema": "Payroll",
+      "description": "Monthly payroll ledger entries"
+    },
+    "roles": {
+      "schema": "Role",
+      "description": "Permission levels mapped to system view navigation"
+    },
+    "app_users": {
+      "schema": "User",
+      "description": "System access user accounts"
+    },
+    "organization_settings": {
+      "schema": "OrganizationSettings",
+      "description": "Metadata settings of the factory organization"
+    }
+  }
+}

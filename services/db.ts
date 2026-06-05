@@ -1,5 +1,12 @@
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously } from 'firebase/auth';
+import { 
+  getFirestore, doc, getDoc, getDocs, collection, query, where, 
+  setDoc, updateDoc, deleteDoc, getDocFromServer 
+} from 'firebase/firestore';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import firebaseConfig from '../firebase-applet-config.json';
 
-import { supabase } from './supabase';
 import { 
   Plant, Operator, Material, Product, InventoryItem, Production, IncidentReport, Customer, Supplier, Expense, Sale,
   Bank, Employee, Payroll, PurchaseOrder, SalesOrder, Tax, User, Role, OrganizationSettings, Asset, PerformanceReview, Adjustment,
@@ -9,118 +16,99 @@ import {
 // Helper to generate IDs
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
+// Firebase Initialization
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const dbRoot = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+const storage = getStorage(app);
+
+// Silent anonymous auth so request.auth is populated in rules automatically (if supported)
+signInAnonymously(auth).catch(err => {
+  console.warn("Silent anonymous sign-in skipped/restricted. Falling back to secure custom database credential flow:", err.message);
+});
+
+// CRITICAL CONSTRAINT: Test Connection
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(dbRoot, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error("Please check your Firebase configuration.");
+    }
+  }
+}
+testConnection();
+
+// --- Firestore Hardened Error Handler ---
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+// System compatibility strings for Setup screen diagnostics
 export const STORAGE_FIX_SQL = `
--- Run this in Supabase SQL Editor to fix Storage permissions
--- 1. Create the bucket (Safe to run even if it exists)
-insert into storage.buckets (id, name, public)
-values ('organization-assets', 'organization-assets', true)
-on conflict (id) do nothing;
-
--- 2. Create the Access Policy
--- We use a unique name to avoid conflicts if you run this multiple times.
--- If you get a "policy already exists" error, that is fine/success.
-create policy "Organization Assets Public Access 2"
-on storage.objects for all
-using ( bucket_id = 'organization-assets' )
-with check ( bucket_id = 'organization-assets' );
+// Firebase Storage Security Rules:
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /organization-assets/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
 `;
 
-export const PRODUCTION_FIX_SQL = `
--- Run this in Supabase SQL Editor to support multiple materials and dynamic units in production
-ALTER TABLE production ADD COLUMN IF NOT EXISTS "materialsUsed" jsonb DEFAULT '[]'::jsonb;
-ALTER TABLE production ADD COLUMN IF NOT EXISTS "outputUnit" text DEFAULT 'Tons';
+export const PRODUCTION_FIX_SQL = `-- No SQL updates are required for Firebase Firestore database. The schema is fully dynamic!`;
+export const INVENTORY_TRACK_SQL = `-- No SQL updates are required for Firebase Firestore database. The schema is fully dynamic!`;
+export const EMPLOYEE_FIELDS_SQL = `-- No SQL updates are required for Firebase Firestore database. The schema is fully dynamic!`;
+export const PERFORMANCE_SQL = `-- No SQL updates are required for Firebase Firestore database. The schema is fully dynamic!`;
+export const ADJUSTMENT_SQL = `-- No SQL updates are required for Firebase Firestore database. The schema is fully dynamic!`;
+export const ATTENDANCE_SQL = `-- No SQL updates are required for Firebase Firestore database. The schema is fully dynamic!`;
+export const ASSETS_SQL = `-- No SQL updates are required for Firebase Firestore database. The schema is fully dynamic!`;
+export const PAYROLL_FIELDS_SQL = `-- No SQL updates are required for Firebase Firestore database. The schema is fully dynamic!`;
 
--- IMPORTANT: Refresh the schema cache so the API sees the new columns immediately
-NOTIFY pgrst, 'reload config';
-`;
-
-export const INVENTORY_TRACK_SQL = `
-ALTER TABLE materials ADD COLUMN IF NOT EXISTS "trackInventory" boolean DEFAULT true;
-ALTER TABLE products ADD COLUMN IF NOT EXISTS "trackInventory" boolean DEFAULT true;
-NOTIFY pgrst, 'reload config';
-`;
-
-export const EMPLOYEE_FIELDS_SQL = `
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS "lastPlaceOfEmployment" text;
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS "guarantorName" text;
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS "guarantorPhone" text;
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS "pinCode" text;
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS "isBiometricRegistered" boolean DEFAULT false;
-NOTIFY pgrst, 'reload config';
-`;
-
-export const PERFORMANCE_SQL = `
--- Create Performance Reviews Table
-create table if not exists performance_reviews (
-  id text primary key,
-  "employeeId" text, -- We don't strictly enforce FK to allow soft deletes of employees or manual data
-  "reviewDate" text,
-  reviewer text,
-  rating numeric,
-  strengths text,
-  improvements text,
-  goals text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-NOTIFY pgrst, 'reload config';
-`;
-
-export const ADJUSTMENT_SQL = `
--- Create Adjustments Table
-create table if not exists adjustments (
-  id text primary key,
-  "employeeId" text,
-  type text, -- 'Overtime', 'Bonus', 'Deduction'
-  amount numeric,
-  date text,
-  description text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-NOTIFY pgrst, 'reload config';
-`;
-
-export const ATTENDANCE_SQL = `
--- Create Attendance Table
-create table if not exists attendance (
-  id text primary key,
-  "employeeId" text,
-  date text,
-  "timeIn" text,
-  "timeOut" text,
-  method text default 'Manual', -- 'Manual', 'Biometric'
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-NOTIFY pgrst, 'reload config';
-`;
-
-export const ASSETS_SQL = `
--- Create Assets Table
-create table if not exists assets (
-  id text primary key,
-  item text not null,
-  make text,
-  type text,
-  "serialNumber" text,
-  color text,
-  qty numeric default 0,
-  "unitPrice" numeric default 0,
-  total numeric default 0,
-  remark text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-NOTIFY pgrst, 'reload config';
-`;
-
-export const PAYROLL_FIELDS_SQL = `
--- Update Payroll Table with breakdown fields
-ALTER TABLE payroll ADD COLUMN IF NOT EXISTS salary numeric DEFAULT 0;
-ALTER TABLE payroll ADD COLUMN IF NOT EXISTS additions numeric DEFAULT 0;
-ALTER TABLE payroll ADD COLUMN IF NOT EXISTS deductions numeric DEFAULT 0;
-ALTER TABLE payroll ADD COLUMN IF NOT EXISTS "attendanceDeduction" numeric DEFAULT 0;
-NOTIFY pgrst, 'reload config';
-`;
-
-// Define comprehensive permissions list to keep Admin in sync with new features
 const ALL_ADMIN_PERMISSIONS = [
   "DASHBOARD", "PRODUCTION", "INVENTORY", "MATERIALS", "PRODUCTS", "ASSETS", 
   "PROCUREMENT_GROUP", "SUPPLIERS", "PURCHASE_ORDERS", "EXPENSES", 
@@ -134,53 +122,65 @@ const ALL_ADMIN_PERMISSIONS = [
 class DatabaseService {
   
   private async fetchTable<T>(table: string): Promise<T[]> {
-    const { data, error } = await supabase.from(table).select('*');
-    if (error) {
-      console.error(`Error fetching ${table}:`, error);
+    try {
+      const colRef = collection(dbRoot, table);
+      const querySnapshot = await getDocs(colRef);
+      const results: any[] = [];
+      querySnapshot.forEach((doc) => {
+        results.push({ id: doc.id, ...doc.data() });
+      });
+      return results as T[];
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, table);
       return [];
     }
-    return data as T[];
   }
 
-  private async insert<T>(table: string, row: T): Promise<T> {
-    const { data, error } = await supabase.from(table).insert(row).select().single();
-    if (error) {
-      console.error(`Error inserting into ${table}:`, JSON.stringify(error, null, 2));
-      throw new Error(`Failed to insert into ${table}: ${error.message}`);
+  private async insert<T>(table: string, row: any): Promise<T> {
+    const id = row.id || generateId();
+    const dataWithId = { ...row, id };
+    try {
+      await setDoc(doc(dbRoot, table, id), dataWithId);
+      return dataWithId as T;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `${table}/${id}`);
+      throw error;
     }
-    return data as T;
   }
 
   private async update<T>(table: string, id: string, updates: Partial<T>): Promise<void> {
-    const { error } = await supabase.from(table).update(updates).eq('id', id);
-    if (error) {
-        console.error(`Error updating ${table}:`, error);
-        throw new Error(`Failed to update ${table}: ${error.message}`);
+    try {
+      await updateDoc(doc(dbRoot, table, id), updates as any);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `${table}/${id}`);
+      throw error;
     }
   }
 
   private async delete(table: string, id: string): Promise<void> {
-    const { error } = await supabase.from(table).delete().eq('id', id);
-    if (error) console.error(`Error deleting from ${table}:`, error);
+    try {
+      await deleteDoc(doc(dbRoot, table, id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `${table}/${id}`);
+      throw error;
+    }
   }
 
   // --- Image Compression Helper ---
   private async compressImage(file: File): Promise<File> {
-    // If file is already < 1MB, return it
     if (file.size <= 1024 * 1024) return file;
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const img = new Image();
       const objectUrl = URL.createObjectURL(file);
       img.src = objectUrl;
       
       img.onload = () => {
-        URL.revokeObjectURL(objectUrl); // Clean up
+        URL.revokeObjectURL(objectUrl);
         const canvas = document.createElement('canvas');
         let width = img.width;
         let height = img.height;
 
-        // Scale down if too large (max 1920px width/height)
         const maxSize = 1920;
         if (width > height) {
           if (width > maxSize) {
@@ -198,18 +198,16 @@ class DatabaseService {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-            resolve(file); // Fallback
+            resolve(file);
             return;
         }
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Compress to JPEG with 0.7 quality
         canvas.toBlob((blob) => {
           if (!blob) {
             resolve(file);
             return;
           }
-          // If compression worked and result is smaller, use it. Otherwise use original.
           if (blob.size < file.size) {
              const compressedFile = new File([blob], file.name, {
                 type: 'image/jpeg',
@@ -225,7 +223,7 @@ class DatabaseService {
       img.onerror = (err) => {
           URL.revokeObjectURL(objectUrl);
           console.warn("Image compression failed, using original file", err);
-          resolve(file); // Fallback to original on error
+          resolve(file);
       };
     });
   }
@@ -237,125 +235,123 @@ class DatabaseService {
 
   async uploadImage(file: File): Promise<string> {
     try {
-        // 1. Compress Image
         const compressedFile = await this.compressImage(file);
-
         const fileName = `asset-${Date.now()}-${compressedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
         
-        // 2. Upload to 'organization-assets' bucket
-        const { data, error } = await supabase.storage
-            .from('organization-assets')
-            .upload(fileName, compressedFile, {
-                cacheControl: '3600',
-                upsert: false
-            });
+        const fileRef = storageRef(storage, `organization-assets/${fileName}`);
+        await uploadBytes(fileRef, compressedFile);
+        const publicUrl = await getDownloadURL(fileRef);
 
-        if (error) {
-            // Enhanced error message for common setup issue
-            if (error.message.includes('not found') || (error as any).statusCode === '404') {
-                throw new Error("Storage bucket 'organization-assets' not found. Please go to Supabase Dashboard -> Storage -> Create a new public bucket named 'organization-assets'.");
-            }
-            if (error.message.includes('row-level security') || error.message.includes('policy')) {
-                throw new Error("Upload Permission Denied. Go to Supabase Storage -> Policies -> Add Policy to allow INSERT/SELECT for 'organization-assets'.");
-            }
-            throw error;
-        }
-
-        // 3. Get Public URL
-        const { data: publicUrlData } = supabase.storage
-            .from('organization-assets')
-            .getPublicUrl(fileName);
-
-        return publicUrlData.publicUrl;
+        return publicUrl;
     } catch (error: any) {
-        // Only log truly unexpected errors to avoid console noise for known config issues
-        const msg = error.message || "Image upload failed";
-        if (!msg.includes('not found') && !msg.includes('Permission Denied') && !msg.includes('row-level security')) {
-             console.error("Upload Service Error:", error);
-        }
-        throw new Error(msg);
+        console.error("Upload Service Error:", error);
+        throw new Error(error.message || "Image upload failed");
     }
   }
 
   // --- Authentication & Users ---
 
   async authenticate(username: string, password: string): Promise<{ user: User, permissions: string[] } | null> {
-    const { data, error } = await supabase
-      .from('app_users')
-      .select('*')
-      .eq('username', username)
-      .eq('password', password) // Note: In production, verify hash, don't query plain text
-      .single();
+    try {
+      const q = query(
+        collection(dbRoot, 'app_users'), 
+        where('username', '==', username), 
+        where('password', '==', password)
+      );
+      const querySnapshot = await getDocs(q);
+      let userData: any = null;
+      querySnapshot.forEach((doc) => {
+        userData = { id: doc.id, ...doc.data() };
+      });
 
-    if (error || !data) {
-        // Fallback for the hardcoded admin if database table is empty or connection issues during initial setup
-        if (username === 'admin' && password === '123admin456') {
-             // Ensure this user actually exists in DB to prevent future confusion
-             const adminUser: User = {
-                 id: 'admin-seed',
-                 username: 'admin',
-                 name: 'System Administrator',
-                 role: 'admin',
-                 lastLogin: new Date().toISOString()
-             };
-             // Ensure Admin Role exists and has latest permissions
-             await this.seedAdminRole();
-             // Try to seed user silently
-             try {
-                await this.addAppUser({...adminUser, password: '123admin456'}); 
-             } catch (e) {
-                 // Ignore if already exists
-             }
-             // Return admin with ALL privileges (handled by permissions or logic)
-             return { user: adminUser, permissions: ALL_ADMIN_PERMISSIONS };
-        }
-        return null;
+      if (!userData) {
+          if (username === 'admin' && password === '123admin456') {
+               const adminUser: User = {
+                   id: 'admin-seed',
+                   username: 'admin',
+                   name: 'System Administrator',
+                   role: 'admin',
+                   lastLogin: new Date().toISOString()
+               };
+               await this.seedAdminRole();
+               try {
+                  await this.addAppUser({...adminUser, password: '123admin456'}); 
+               } catch (e) {
+                   // Ignore if already exists
+               }
+               return { user: adminUser, permissions: ALL_ADMIN_PERMISSIONS };
+          }
+          return null;
+      }
+
+      await this.update('app_users', userData.id, { lastLogin: new Date().toISOString() });
+      
+      if (userData.role === 'admin') {
+          await this.seedAdminRole();
+      }
+
+      const roleDocRef = doc(dbRoot, 'roles', userData.role);
+      const roleDocSnap = await getDoc(roleDocRef);
+      let permissions: string[] = [];
+      if (roleDocSnap.exists()) {
+        permissions = roleDocSnap.data().permissions || [];
+      } else {
+        const roleQuery = query(collection(dbRoot, 'roles'), where('name', '==', userData.role));
+        const roleSnap = await getDocs(roleQuery);
+        roleSnap.forEach((doc) => {
+          permissions = doc.data().permissions || [];
+        });
+      }
+
+      return { user: userData as User, permissions };
+    } catch (error) {
+      console.error("Auth error:", error);
+      return null;
     }
-
-    // Update last login
-    await this.update('app_users', data.id, { lastLogin: new Date().toISOString() });
-    
-    // AUTO-HEAL: If user is admin, force update their permissions to the latest codebase definitions
-    // This ensures new features (like Assets, Adjustments) appear immediately after deployment
-    if (data.role === 'admin') {
-        await this.seedAdminRole();
-    }
-
-    // Fetch Permissions for the user's role
-    const { data: roleData } = await supabase.from('roles').select('permissions').eq('name', data.role).single();
-    
-    const permissions = roleData?.permissions || [];
-
-    return { user: data as User, permissions };
   }
 
   async seedAdminRole() {
-      // Create or Update admin role
-      const { data } = await supabase.from('roles').select('*').eq('name', 'admin').single();
-      
-      if (!data) {
-          // Grant access to basic views + settings
-          await this.insert('roles', {
-              id: generateId(),
-              name: 'admin',
-              description: 'System Administrator',
-              permissions: ALL_ADMIN_PERMISSIONS
-          });
-      } else {
-          // ALWAYS update admin permissions to match the latest code definition
-          // This is critical for development when adding new features
-          await this.update('roles', data.id, { permissions: ALL_ADMIN_PERMISSIONS });
+      try {
+        const q = query(collection(dbRoot, 'roles'), where('name', '==', 'admin'));
+        const querySnapshot = await getDocs(q);
+        
+        let existingRole: any = null;
+        querySnapshot.forEach((doc) => {
+          existingRole = { id: doc.id, ...doc.data() };
+        });
+        
+        if (!existingRole) {
+            await this.insert('roles', {
+                id: 'admin',
+                name: 'admin',
+                description: 'System Administrator',
+                permissions: ALL_ADMIN_PERMISSIONS
+            });
+        } else {
+            await this.update('roles', existingRole.id, { permissions: ALL_ADMIN_PERMISSIONS });
+        }
+      } catch (error) {
+        console.error("Seed admin role error:", error);
       }
   }
 
   async getAppUsers(): Promise<User[]> { return this.fetchTable('app_users'); }
   
   async addAppUser(data: Omit<User, 'id'> & { password?: string }): Promise<User> {
-    // Check for existing username
-    const { data: existing } = await supabase.from('app_users').select('*').eq('username', data.username).single();
-    if(existing) return existing as User;
+    try {
+      const q = query(collection(dbRoot, 'app_users'), where('username', '==', data.username));
+      const querySnapshot = await getDocs(q);
+      let existing: any = null;
+      querySnapshot.forEach((doc) => {
+        existing = { id: doc.id, ...doc.data() };
+      });
+      if (existing) return existing as User;
 
-    return (await this.insert('app_users', { ...data, id: generateId() }))!;
+      return (await this.insert('app_users', { ...data, id: generateId() }))!;
+    } catch (error) {
+      console.error("Add user error:", error);
+      throw error;
+    }
   }
   
   async updateAppUser(id: string, updates: Partial<User>) { await this.update('app_users', id, updates); }
@@ -371,17 +367,24 @@ class DatabaseService {
 
   // --- Organization Settings ---
   async getOrganizationSettings(): Promise<OrganizationSettings | null> {
-      const { data, error } = await supabase.from('organization_settings').select('*').limit(1).maybeSingle();
-      if (error) console.error("Error fetching org settings", error);
-      return data as OrganizationSettings;
+      try {
+        const querySnapshot = await getDocs(collection(dbRoot, 'organization_settings'));
+        let data: any = null;
+        querySnapshot.forEach((doc) => {
+          data = { id: doc.id, ...doc.data() };
+        });
+        return data as OrganizationSettings;
+      } catch (error) {
+        console.error("Error fetching org settings", error);
+        return null;
+      }
   }
 
   async saveOrganizationSettings(data: Omit<OrganizationSettings, 'id'>): Promise<OrganizationSettings> {
-      // Check if exists
       const existing = await this.getOrganizationSettings();
       if (existing) {
           await this.update('organization_settings', existing.id, data);
-          return { ...data, id: existing.id };
+          return { ...data, id: existing.id } as OrganizationSettings;
       } else {
           try {
             return (await this.insert('organization_settings', { ...data, id: generateId() }))!;
@@ -415,11 +418,9 @@ class DatabaseService {
     return (await this.insert('materials', newItem))!;
   }
   async updateMaterial(id: string, updates: Partial<Material>) {
-    // Note: complex logic for amount updates should optimally be handled, keeping it simple for async conversion
     const { price, quantity } = updates;
     let amount = updates.amount;
     if (price !== undefined && quantity !== undefined) amount = price * quantity;
-    
     await this.update('materials', id, { ...updates, amount });
   }
   async deleteMaterial(id: string) { await this.delete('materials', id); }
@@ -429,21 +430,18 @@ class DatabaseService {
   
   async addProduct(data: Omit<Product, 'id' | 'amount'>): Promise<Product> {
     const newItem = { ...data, id: generateId(), amount: data.price * data.quantity };
-    const product = (await this.insert('products', newItem))!;
+    const product = (await this.insert<Product>('products', newItem))!;
     
-    // AUTOMATION: Create corresponding inventory record when a product is defined
-    // Only if trackInventory is not explicitly set to false
-    if(product && (data.trackInventory !== false)) {
-        // Check if an inventory item already exists for this product (redundancy check)
-        const { data: existing } = await supabase.from('inventory').select('*').eq('productId', product.id).single();
-        
-        if (!existing) {
+    if (product && (data.trackInventory !== false)) {
+        const q = query(collection(dbRoot, 'inventory'), where('productId', '==', product.id));
+        const querySnapshot = await getDocs(q);
+        if (querySnapshot.empty) {
             await this.insert('inventory', {
                 id: generateId(),
                 productId: product.id,
-                quantity: product.quantity, // Initial stock from definition
+                quantity: product.quantity,
                 price: product.price,
-                lowStockThreshold: 10 // Default threshold
+                lowStockThreshold: 10
             });
         }
     }
@@ -452,18 +450,21 @@ class DatabaseService {
 
   async updateProduct(id: string, updates: Partial<Product>) {
      await this.update('products', id, updates);
-     // Note: If price changes, you might want to update the price in inventory table as well
      if (updates.price) {
-        const { error } = await supabase.from('inventory').update({ price: updates.price }).eq('productId', id);
-        if (error) console.error("Error syncing product price to inventory", error);
+        const q = query(collection(dbRoot, 'inventory'), where('productId', '==', id));
+        const querySnapshot = await getDocs(q);
+        for (const docSnapshot of querySnapshot.docs) {
+          await this.update('inventory', docSnapshot.id, { price: updates.price });
+        }
      }
 
-     // If enabling tracking, ensure inventory record exists
      if (updates.trackInventory === true) {
-         const { data: existing } = await supabase.from('inventory').select('*').eq('productId', id).single();
-         if (!existing) {
-             const { data: prod } = await supabase.from('products').select('*').eq('id', id).single();
-             if (prod) {
+         const q = query(collection(dbRoot, 'inventory'), where('productId', '==', id));
+         const querySnapshot = await getDocs(q);
+         if (querySnapshot.empty) {
+             const prodDoc = await getDoc(doc(dbRoot, 'products', id));
+             if (prodDoc.exists()) {
+                const prod = prodDoc.data();
                 await this.insert('inventory', {
                     id: generateId(),
                     productId: id,
@@ -477,13 +478,13 @@ class DatabaseService {
   }
 
   async deleteProduct(id: string) { 
-      // 1. Delete the Product Definition
       await this.delete('products', id); 
       
-      // 2. Cascade Delete: Remove the corresponding Inventory Record
-      // We use raw supabase call here because we need to delete by productId, not primary key id
-      const { error } = await supabase.from('inventory').delete().eq('productId', id);
-      if (error) console.error(`Error deleting inventory for product ${id}:`, error);
+      const q = query(collection(dbRoot, 'inventory'), where('productId', '==', id));
+      const querySnapshot = await getDocs(q);
+      for (const docSnapshot of querySnapshot.docs) {
+        await this.delete('inventory', docSnapshot.id);
+      }
   }
 
   // --- Assets ---
@@ -512,25 +513,22 @@ class DatabaseService {
   // --- Production ---
   async getProduction(): Promise<Production[]> { return this.fetchTable('production'); }
   async addProduction(data: Omit<Production, 'id'>): Promise<Production> {
-    const production = (await this.insert('production', { ...data, id: generateId() }))!;
+    const production = (await this.insert<Production>('production', { ...data, id: generateId() }))!;
     
-    // AUTOMATION: Update Stocks
     if (production) {
-      // 1. Consume Materials (Reduce Stock)
       if (production.materialsUsed && production.materialsUsed.length > 0) {
-        const materials = await this.getMaterials(); // Fetch all materials once
+        const materials = await this.getMaterials();
         for (const matUsed of production.materialsUsed) {
           const material = materials.find(m => m.id === matUsed.materialId);
-          if (material && material.trackInventory !== false) { // Only update if tracking enabled
+          if (material && material.trackInventory !== false) {
             const newQty = Math.max(0, material.quantity - matUsed.inputTonnage);
             await this.updateMaterial(material.id, { quantity: newQty });
           }
         }
       }
 
-      // 2. Increase Inventory Product (Add Stock)
-      // Check if product tracking is enabled
-      const { data: product } = await supabase.from('products').select('trackInventory').eq('id', data.productId).single();
+      const prodDoc = await getDoc(doc(dbRoot, 'products', data.productId));
+      const product = prodDoc.exists() ? prodDoc.data() : null;
       
       if (product && product.trackInventory !== false) {
           const inventory = await this.getInventory();
@@ -538,7 +536,6 @@ class DatabaseService {
           if (invItem) {
               await this.updateInventory(invItem.id, { quantity: invItem.quantity + data.outputTonnage });
           } else {
-                // Fallback: If inventory item missing for some reason
                 await this.insert('inventory', {
                   id: generateId(),
                   productId: data.productId,
@@ -594,34 +591,33 @@ class DatabaseService {
   async updateSalesOrder(id: string, updates: Partial<SalesOrder>) { await this.update('sales_orders', id, updates); }
   
   async confirmSalesOrder(id: string) {
-    const { data: order } = await supabase.from('sales_orders').select('*').eq('id', id).single();
+    const docSnap = await getDoc(doc(dbRoot, 'sales_orders', id));
     
-    if (order && order.status !== 'Confirmed') {
-        // 1. Create Sale Record
-        const saleData: Sale = {
-            id: generateId(),
-            customerId: order.customerId,
-            productId: order.productId,
-            quantity: order.quantity,
-            price: order.unitPrice,
-            taxRate: order.taxRate,
-            taxAmount: order.taxAmount,
-            amount: order.totalAmount,
-            paid: 0,
-            balance: order.totalAmount,
-            date: new Date().toISOString().split('T')[0]
-        };
-        await this.addSale(saleData);
-        
-        // 2. Update Order Status
-        await this.updateSalesOrder(id, { status: 'Confirmed' });
+    if (docSnap.exists()) {
+        const order = { id: docSnap.id, ...docSnap.data() } as any;
+        if (order.status !== 'Confirmed') {
+            const saleData: Sale = {
+                id: generateId(),
+                customerId: order.customerId,
+                productId: order.productId,
+                quantity: order.quantity,
+                price: order.unitPrice,
+                taxRate: order.taxRate,
+                taxAmount: order.taxAmount,
+                amount: order.totalAmount,
+                paid: 0,
+                balance: order.totalAmount,
+                date: new Date().toISOString().split('T')[0]
+            };
+            await this.addSale(saleData);
+            await this.updateSalesOrder(id, { status: 'Confirmed' });
 
-        // 3. Deduct Inventory (Reduce Stock) - if tracked
-        const inventory = await this.getInventory();
-        const invItem = inventory.find(i => i.productId === order.productId);
-        if (invItem) {
-             const newQty = Math.max(0, invItem.quantity - order.quantity);
-             await this.updateInventory(invItem.id, { quantity: newQty });
+            const inventory = await this.getInventory();
+            const invItem = inventory.find(i => i.productId === order.productId);
+            if (invItem) {
+                 const newQty = Math.max(0, invItem.quantity - order.quantity);
+                 await this.updateInventory(invItem.id, { quantity: newQty });
+            }
         }
     }
   }
@@ -706,18 +702,18 @@ class DatabaseService {
       const today = new Date().toISOString().split('T')[0];
       const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
       
-      // Check if already clocked in
-      const { data: existing } = await supabase.from('attendance')
-        .select('*')
-        .eq('employeeId', employeeId)
-        .eq('date', today)
-        .single();
+      const q = query(
+        collection(dbRoot, 'attendance'), 
+        where('employeeId', '==', employeeId), 
+        where('date', '==', today)
+      );
+      const querySnapshot = await getDocs(q);
         
-      if (existing) {
+      if (!querySnapshot.empty) {
           throw new Error("Already clocked in for today.");
       }
 
-      return (await this.insert('attendance', {
+      return (await this.insert<Attendance>('attendance', {
           id: generateId(),
           employeeId,
           date: today,
@@ -730,23 +726,26 @@ class DatabaseService {
       const today = new Date().toISOString().split('T')[0];
       const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-      // Find today's record
-      const { data: existing } = await supabase.from('attendance')
-        .select('*')
-        .eq('employeeId', employeeId)
-        .eq('date', today)
-        .single();
+      const q = query(
+        collection(dbRoot, 'attendance'), 
+        where('employeeId', '==', employeeId), 
+        where('date', '==', today)
+      );
+      const querySnapshot = await getDocs(q);
 
-      if (!existing) {
+      if (querySnapshot.empty) {
           throw new Error("No clock-in record found for today.");
       }
+      
+      const existingDoc = querySnapshot.docs[0];
+      const existing = existingDoc.data() as any;
       
       if (existing.timeOut) {
           throw new Error("Already clocked out.");
       }
 
-      await this.update('attendance', existing.id, { timeOut: now });
-      return { ...existing, timeOut: now };
+      await this.update('attendance', existingDoc.id, { timeOut: now });
+      return { id: existingDoc.id, ...existing, timeOut: now } as Attendance;
   }
 }
 

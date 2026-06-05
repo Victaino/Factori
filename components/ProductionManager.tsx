@@ -416,7 +416,7 @@ export const ProductionManager: React.FC = () => {
                         <option value="">Select Material</option>
                         {materials.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
-                      <input required type="number" step="0.1" className="w-32 border rounded-lg p-2" placeholder="Tons" value={mat.inputTonnage} onChange={e => handleMaterialChange(index, 'inputTonnage', e.target.value)} />
+                      <input required type="number" step="0.1" className="w-32 border rounded-lg p-2" placeholder="Tons" value={isNaN(mat.inputTonnage) ? '' : mat.inputTonnage} onChange={e => handleMaterialChange(index, 'inputTonnage', e.target.value)} />
                       <button type="button" onClick={() => removeMaterialRow(index)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg" disabled={formData.materialsUsed.length <= 1}>
                         <Trash2 size={16} />
                       </button>
@@ -433,7 +433,7 @@ export const ProductionManager: React.FC = () => {
                     <div className="flex-1">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Output Quantity</label>
                         <input required type="number" step="0.1" className="w-full border rounded-lg p-2"
-                            value={formData.outputTonnage} onChange={e => setFormData({...formData, outputTonnage: parseFloat(e.target.value)})} />
+                            value={isNaN(formData.outputTonnage) ? '' : formData.outputTonnage} onChange={e => setFormData({...formData, outputTonnage: parseFloat(e.target.value)})} />
                     </div>
                     <div className="w-1/3">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>

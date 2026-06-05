@@ -255,8 +255,11 @@ export const SalesManager: React.FC = () => {
   };
   
   const calculateTax = (price: number, qty: number, rate: number) => {
-      const subtotal = price * qty;
-      return subtotal * (rate / 100);
+      const p = isNaN(price) ? 0 : price;
+      const q = isNaN(qty) ? 0 : qty;
+      const r = isNaN(rate) ? 0 : rate;
+      const subtotal = p * q;
+      return subtotal * (r / 100);
   };
 
   const updateFormCalculations = (newQty: number, newPrice: number, newTaxRate: number) => {
@@ -450,13 +453,13 @@ export const SalesManager: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
                   <input required type="number" min="0" className="w-full border rounded-lg p-2" 
-                    value={formData.quantity} 
+                    value={isNaN(formData.quantity) ? '' : formData.quantity} 
                     onChange={e => updateFormCalculations(parseFloat(e.target.value), formData.price, formData.taxRate)} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Unit Price</label>
                   <input required type="number" min="0" className="w-full border rounded-lg p-2" 
-                    value={formData.price} 
+                    value={isNaN(formData.price) ? '' : formData.price} 
                     onChange={e => updateFormCalculations(formData.quantity, parseFloat(e.target.value), formData.taxRate)} />
                 </div>
               </div>
@@ -484,14 +487,14 @@ export const SalesManager: React.FC = () => {
                <div className="bg-gray-50 p-3 rounded-lg border flex justify-between items-center">
                   <span className="text-sm font-medium text-gray-600">Total (Inc. Tax):</span>
                   <span className="text-lg font-bold text-gray-800">
-                      {formatCurrency((formData.quantity * formData.price) + formData.taxAmount)}
+                      {formatCurrency(((isNaN(formData.quantity) ? 0 : formData.quantity) * (isNaN(formData.price) ? 0 : formData.price)) + (isNaN(formData.taxAmount) ? 0 : formData.taxAmount))}
                   </span>
               </div>
 
               <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Paid Amount</label>
                   <input required type="number" min="0" className="w-full border rounded-lg p-2" 
-                    value={formData.paid} onChange={e => setFormData({...formData, paid: parseFloat(e.target.value)})} />
+                    value={isNaN(formData.paid) ? '' : formData.paid} onChange={e => setFormData({...formData, paid: parseFloat(e.target.value)})} />
               </div>
 
               <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 mt-2">

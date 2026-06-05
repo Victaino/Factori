@@ -439,7 +439,7 @@ export const SetupScreen: React.FC = () => {
                    <input 
                     type="number" 
                     className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"
-                    value={formData.taxRate}
+                    value={isNaN(formData.taxRate) ? '' : formData.taxRate}
                     onChange={e => setFormData({...formData, taxRate: parseFloat(e.target.value)})}
                   />
                 </div>
