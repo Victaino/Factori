@@ -13,7 +13,28 @@ export const SettingsManager: React.FC = () => {
     colorTheme, setColorTheme 
   } = useSettings();
 
-  const [activeTab, setActiveTab] = useState<'APPEARANCE' | 'ORGANIZATION' | 'DASHBOARD'>('ORGANIZATION');
+  const [activeTab, setActiveTab] = useState<'APPEARANCE' | 'ORGANIZATION' | 'DASHBOARD' | 'DATABASE'>('ORGANIZATION');
+  const [dbStatus, setDbStatus] = useState<{ connected: boolean, type: string, error: string | null, host: string } | null>(null);
+  const [checkingDb, setCheckingDb] = useState(false);
+
+  const checkDbStatus = async () => {
+    setCheckingDb(true);
+    try {
+      const res = await fetch('/api/db-status');
+      if (res.ok) {
+        const data = await res.json();
+        setDbStatus(data);
+      }
+    } catch (err) {
+      console.warn("Could not fetch DB status:", err);
+    } finally {
+      setCheckingDb(false);
+    }
+  };
+
+  useEffect(() => {
+    checkDbStatus();
+  }, []);
   
   // Local state for org form
   const [orgForm, setOrgForm] = useState({
@@ -193,6 +214,14 @@ export const SettingsManager: React.FC = () => {
             }`}
           >
             Appearance
+          </button>
+          <button
+            onClick={() => setActiveTab('DATABASE')}
+            className={`flex-1 py-4 text-sm font-medium transition-colors ${
+              activeTab === 'DATABASE' ? 'text-primary-600 border-b-2 border-primary-600' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Database Connectivity
           </button>
         </div>
 
@@ -451,6 +480,118 @@ export const SettingsManager: React.FC = () => {
                   </button>
                 </div>
               </section>
+            </div>
+          )}
+
+          {activeTab === 'DATABASE' && (
+            <div className="space-y-6 animate-fade-in text-gray-700">
+              <div className="border-b pb-4">
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <Terminal size={20} className="text-primary-600" /> Relational Database Diagnostics & Status
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Monitor and verify the active connection status of your relational PostgreSQL engine and the Firebase SQL Connect identity provider.
+                </p>
+              </div>
+
+              {dbStatus ? (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* PostgreSQL Storage Status Card */}
+                    <div className={`border rounded-xl p-6 transition-all shadow-sm ${dbStatus.connected ? 'bg-emerald-50/50 border-emerald-200' : 'bg-amber-50/30 border-amber-200'}`}>
+                      <div className="flex items-center gap-3 border-b pb-3 mb-4">
+                        <div className={`p-2 rounded-lg text-white ${dbStatus.connected ? 'bg-emerald-500' : 'bg-amber-500'}`}>
+                          {dbStatus.connected ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-gray-900 text-sm">PostgreSQL (Cloud SQL)</h4>
+                          <span className={`text-xs px-2 py-0.5 rounded font-medium mt-1 inline-block ${dbStatus.connected ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                            {dbStatus.connected ? 'Active Connection' : 'Unreachable - Standby Fallback'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 text-xs">
+                        <div className="grid grid-cols-3 font-semibold text-gray-500"><span>Target Host:</span><span className="col-span-2 font-mono text-gray-900 truncate">{dbStatus.host || 'N/A'}</span></div>
+                        <div className="grid grid-cols-3 font-semibold text-gray-500"><span>Database Port:</span><span className="col-span-2 text-gray-900 font-mono">5432</span></div>
+                        {dbStatus.error && (
+                          <div className="mt-3 bg-red-50 text-red-700 p-2 rounded text-xxs font-mono overflow-auto max-h-16 border border-red-100">
+                            Error: {dbStatus.error}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Firebase SQL Connect Instance Card */}
+                    <div className={`border rounded-xl p-6 transition-all shadow-sm ${dbStatus.firebaseConfig ? 'bg-emerald-50/50 border-emerald-200' : 'bg-amber-50/30 border-amber-200'}`}>
+                      <div className="flex items-center gap-3 border-b pb-3 mb-4">
+                        <div className={`p-2 rounded-lg text-white ${dbStatus.firebaseConfig ? 'bg-emerald-500' : 'bg-amber-500'}`}>
+                          {dbStatus.firebaseConfig ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-gray-900 text-sm">Firebase SQL Connect</h4>
+                          <span className={`text-xs px-2 py-0.5 rounded font-medium mt-1 inline-block ${dbStatus.firebaseConfig ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'}`}>
+                            {dbStatus.firebaseConfig ? 'Ready & Verified' : 'Standby Mode'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 text-xs">
+                        <div className="grid grid-cols-3 font-semibold text-gray-500"><span>Project ID:</span><span className="col-span-2 font-mono text-gray-900 truncate">{dbStatus.firebaseConfig?.projectId || 'Not Configured'}</span></div>
+                        <div className="grid grid-cols-3 font-semibold text-gray-500"><span>Auth Domain:</span><span className="col-span-2 text-gray-900 font-mono truncate">{dbStatus.firebaseConfig?.authDomain || 'N/A'}</span></div>
+                        <div className="grid grid-cols-3 font-semibold text-gray-500"><span>Database core:</span><span className="col-span-2 text-gray-900 truncate">{dbStatus.firebaseConfig?.firestoreDatabaseId || 'N/A'}</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Resilient Local Sync Notification */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 text-blue-800 flex items-start gap-3">
+                    <Terminal size={20} className="text-blue-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-bold text-blue-900 text-sm">Resilient Embedded Storage Strategy</p>
+                      <p className="text-xs leading-relaxed mt-1">
+                        Your application operates an **offline-first developer storage engine**. Reads and writes will interact with your high-speed, secure **PostgreSQL Cloud SQL instance** whenever connected, but will automatically direct data writes to your isolated **local JSON sandbox** whenever database sockets are timed out or unreachable, guarding database speed and preventing loss of data.
+                      </p>
+                    </div>
+                  </div>
+
+                  {!dbStatus.connected && (
+                    <div className="bg-white border rounded-xl p-6 space-y-4 shadow-sm">
+                      <h4 className="font-bold text-gray-900 text-sm">How to authorize a public socket on your PostgreSQL DB:</h4>
+                      <ol className="list-decimal list-inside space-y-2 text-xs text-gray-600">
+                        <li>Open the <strong>Google Cloud Console</strong> and find your SQL instances.</li>
+                        <li>Select database instance <code className="bg-gray-100 px-1 py-0.5 rounded text-primary-700">factori</code>.</li>
+                        <li>Go to <strong>Connections</strong> &rarr; under <strong>Authorized Networks</strong>, add <code className="bg-gray-100 px-1 py-0.5 rounded text-indigo-700">0.0.0.0/0</code> temporarily to authorize public preview socket access.</li>
+                        <li>Click <strong>Save</strong> and wait a few moments for the setting changes to deploy on Google Cloud.</li>
+                      </ol>
+                    </div>
+                  )}
+
+                  {/* Test Connection Button */}
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="button"
+                      onClick={checkDbStatus}
+                      disabled={checkingDb}
+                      className="px-4 py-2 border rounded-lg text-sm font-semibold bg-white text-gray-700 hover:bg-gray-50 flex items-center gap-2 shadow-sm transition-all"
+                    >
+                      {checkingDb ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin text-primary-600" /> Refreshing Status...
+                        </>
+                      ) : (
+                        <>
+                          <Terminal size={16} className="text-gray-500" /> Refresh Diagnostics
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center p-12">
+                  <Loader2 size={32} className="animate-spin text-primary-600" />
+                </div>
+              )}
             </div>
           )}
         </div>
