@@ -110,17 +110,54 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const fetchSettings = async () => {
       try {
         const data = await db.getOrganizationSettings();
-        if (data) {
+        if (data && data.companyName) {
           setSettings(data);
           setCurrency(data.baseCurrency || '₦');
           setTheme((data.defaultTheme as Theme) || 'light');
           setColorTheme((data.defaultColorTheme as ColorTheme) || 'blue');
-          setIsConfigured(!!data.companyName);
+          setIsConfigured(true);
         } else {
-          setIsConfigured(false);
+          // Auto-seed default organization settings to bypass setup wizard
+          const defaultSettings: OrganizationSettings = {
+            id: 'default-org',
+            companyName: 'Factori Industrial',
+            companyAddress: '10 Industrial Way, Lagos, Nigeria',
+            companyTin: '12345678-0001',
+            companyLogo: '',
+            taxName: 'VAT',
+            taxRate: 7.5,
+            baseCurrency: '₦',
+            defaultTheme: 'light',
+            defaultColorTheme: 'blue',
+            dashboardConfig: {
+              showProductionOutput: true,
+              showInventoryValue: true,
+              showLowStockAlert: true,
+              showIncidents: true,
+              showTotalSales: true,
+              showPurchases: true,
+              showPayrollCost: true,
+              showNetProfit: true
+            }
+          };
+          try {
+            const saved = await db.saveOrganizationSettings(defaultSettings);
+            setSettings(saved);
+            setCurrency(saved.baseCurrency || '₦');
+            setTheme((saved.defaultTheme as Theme) || 'light');
+            setColorTheme((saved.defaultColorTheme as ColorTheme) || 'blue');
+          } catch (err) {
+            console.error("Failed to persist default settings, falling back to local memory:", err);
+            setSettings(defaultSettings);
+            setCurrency('₦');
+            setTheme('light');
+            setColorTheme('blue');
+          }
+          setIsConfigured(true);
         }
       } catch (e) {
         console.error("Error loading settings", e);
+        setIsConfigured(true); // Ensure user is not locked out
       } finally {
         setLoading(false);
       }

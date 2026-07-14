@@ -26,7 +26,6 @@ import { PerformanceReviewManager } from './components/PerformanceReviewManager'
 import { AdjustmentManager } from './components/AdjustmentManager';
 import { AttendanceManager } from './components/AttendanceManager';
 import { LoginScreen } from './components/LoginScreen';
-import { SetupScreen } from './components/SetupScreen';
 import { ViewState } from './types';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -34,7 +33,7 @@ import { Loader2 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, hasPermission } = useAuth();
-  const { isConfigured, loading } = useSettings();
+  const { loading } = useSettings();
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
 
   if (loading) {
@@ -43,11 +42,6 @@ const AppContent: React.FC = () => {
               <Loader2 className="animate-spin text-primary-600" size={48} />
           </div>
       );
-  }
-
-  // Show Setup Wizard if org not configured
-  if (!isConfigured) {
-      return <SetupScreen />;
   }
 
   // Show Login if configured but not authenticated
