@@ -85,14 +85,34 @@ export const LoginScreen: React.FC = () => {
                 <button 
                     type="submit" 
                     disabled={isLoading}
-                    className="w-full bg-primary-600 text-white py-3 rounded-lg font-bold hover:bg-primary-700 transition-colors flex justify-center items-center"
+                    className="w-full bg-primary-600 text-white py-3 rounded-lg font-bold hover:bg-primary-700 transition-colors flex justify-center items-center shadow-md"
                 >
                     {isLoading ? <Loader2 className="animate-spin" /> : 'Log In'}
                 </button>
             </form>
 
-            <div className="mt-6 text-center text-xs text-gray-400">
-                <p>Protected System. Authorized Access Only.</p>
+            <div className="mt-6 pt-4 border-t border-gray-100 dark:border-slate-700">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 text-center">Quick Demo Login:</p>
+                <div className="flex gap-2">
+                    <button
+                        type="button"
+                        onClick={() => { setUsername('admin'); setPassword('123admin456'); }}
+                        className="flex-1 text-xs py-2 px-3 bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-lg text-gray-700 dark:text-gray-200 font-medium transition-colors"
+                    >
+                        Admin (admin)
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => { setUsername('Loveday'); setPassword('123456'); }}
+                        className="flex-1 text-xs py-2 px-3 bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-lg text-gray-700 dark:text-gray-200 font-medium transition-colors"
+                    >
+                        Operator (Loveday)
+                    </button>
+                </div>
+            </div>
+
+            <div className="mt-4 text-center text-xs text-gray-400">
+                <p>Factori Engine • Ready for Netlify & Cloud Run</p>
             </div>
         </div>
       </div>

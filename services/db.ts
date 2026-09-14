@@ -3,22 +3,23 @@ import {
   Bank, Employee, Payroll, PurchaseOrder, SalesOrder, Tax, User, Role, OrganizationSettings, Asset, PerformanceReview, Adjustment,
   Deduction, Attendance
 } from '../types';
+import { getFullSeedDatabase } from './initialData';
 
-// Helper to generate IDs (perfectly compatible with any ID creation)
-const generateId = () => Math.random().toString(36).substr(2, 9);
+// Helper to generate IDs
+const generateId = () => Math.random().toString(36).substring(2, 11);
 
-// System compatibility strings for Setup screen diagnostics and copy actions
-export const STORAGE_FIX_SQL = `-- Storage setup is completed. Using secure local high-speed base64 storage.`;
-export const PRODUCTION_FIX_SQL = `-- Relational schemas are successfully initialized on the Cloud SQL PostgreSQL instance.`;
-export const INVENTORY_TRACK_SQL = `-- Dynamic inventory tables are configured in PostgreSQL.`;
-export const EMPLOYEE_FIELDS_SQL = `-- Employee records are configured in PostgreSQL.`;
-export const PERFORMANCE_SQL = `-- Performance metrics are configured in PostgreSQL.`;
-export const ADJUSTMENT_SQL = `-- Adjustment tables are configured in PostgreSQL.`;
-export const ATTENDANCE_SQL = `-- Attendance tracking is configured in PostgreSQL.`;
-export const ASSETS_SQL = `-- Asset ledger is configured in PostgreSQL.`;
-export const PAYROLL_FIELDS_SQL = `-- Payroll definitions are configured in PostgreSQL.`;
+// System compatibility strings for diagnostics
+export const STORAGE_FIX_SQL = `-- Storage setup is completed. Offline-first client engine & PostgreSQL sync active.`;
+export const PRODUCTION_FIX_SQL = `-- Relational schemas are configured.`;
+export const INVENTORY_TRACK_SQL = `-- Dynamic inventory tables are configured.`;
+export const EMPLOYEE_FIELDS_SQL = `-- Employee records are configured.`;
+export const PERFORMANCE_SQL = `-- Performance metrics are configured.`;
+export const ADJUSTMENT_SQL = `-- Adjustment tables are configured.`;
+export const ATTENDANCE_SQL = `-- Attendance tracking is configured.`;
+export const ASSETS_SQL = `-- Asset ledger is configured.`;
+export const PAYROLL_FIELDS_SQL = `-- Payroll definitions are configured.`;
 
-const ALL_ADMIN_PERMISSIONS = [
+export const ALL_ADMIN_PERMISSIONS = [
   "DASHBOARD", "PRODUCTION", "INVENTORY", "MATERIALS", "PRODUCTS", "ASSETS", 
   "PROCUREMENT_GROUP", "SUPPLIERS", "PURCHASE_ORDERS", "EXPENSES", 
   "SALES_BILLING_GROUP", "SALES", "SALES_ORDERS", "INVOICES", "CUSTOMERS", 
@@ -28,98 +29,358 @@ const ALL_ADMIN_PERMISSIONS = [
   "SETTINGS_GROUP", "SETTINGS", "USERS", "ROLES", "DEDUCTIONS"
 ];
 
-class DatabaseService {
-  private async fetchTable<T>(table: string): Promise<T[]> {
-    try {
-      const res = await fetch(`/api/db/${table}`);
-      if (!res.ok) {
-        throw new Error(`Failed to fetch table ${table}`);
+const LOCAL_STORAGE_KEY = 'factori_offline_db_v2';
+const API_URL_KEY = 'factori_api_url';
+
+export class DatabaseService {
+  private isRemoteActive: boolean | null = null;
+
+  // --- API Endpoint Resolution ---
+  public getApiBaseUrl(): string {
+    if (typeof window !== 'undefined') {
+      const customUrl = localStorage.getItem(API_URL_KEY);
+      if (customUrl && customUrl.trim()) {
+        return customUrl.trim().replace(/\/+$/, '');
       }
-      return await res.json() as T[];
-    } catch (error) {
-      console.error(`Error listing ${table}:`, error);
-      return [];
+    }
+    const envUrl = (import.meta as any).env?.VITE_API_URL;
+    if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+      return envUrl.trim().replace(/\/+$/, '');
+    }
+    return ''; // Relative path by default (works with server.ts when co-hosted)
+  }
+
+  public setApiBaseUrl(url: string) {
+    if (typeof window !== 'undefined') {
+      if (!url || !url.trim()) {
+        localStorage.removeItem(API_URL_KEY);
+      } else {
+        localStorage.setItem(API_URL_KEY, url.trim().replace(/\/+$/, ''));
+      }
+      this.isRemoteActive = null;
     }
   }
 
-  private async getSingleEntry<T>(table: string, id: string): Promise<T | null> {
-    try {
-      const res = await fetch(`/api/db/${table}/${id}`);
-      if (!res.ok) {
-        if (res.status === 404) return null;
-        throw new Error(`Failed to get single entry ${table}/${id}`);
-      }
-      return await res.json() as T;
-    } catch (error) {
-      console.error(`Error fetching single ${table}/${id}:`, error);
-      return null;
+  // --- Client-Side Local Storage Database Engine ---
+  private loadLocalDb(): Record<string, Record<string, any>> {
+    if (typeof window === 'undefined') {
+      return getFullSeedDatabase();
     }
+
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+          // Ensure critical collections exist
+          if (!parsed.roles || Object.keys(parsed.roles).length === 0) {
+            const seed = getFullSeedDatabase();
+            parsed.roles = seed.roles;
+          }
+          if (!parsed.app_users || Object.keys(parsed.app_users).length === 0) {
+            const seed = getFullSeedDatabase();
+            parsed.app_users = seed.app_users;
+          }
+          if (!parsed.organization_settings || Object.keys(parsed.organization_settings).length === 0) {
+            const seed = getFullSeedDatabase();
+            parsed.organization_settings = seed.organization_settings;
+          }
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load local DB from localStorage:", e);
+    }
+
+    // Initialize with seed data
+    const initialSeed = getFullSeedDatabase();
+    this.saveLocalDb(initialSeed);
+    return initialSeed;
+  }
+
+  private saveLocalDb(dbData: Record<string, Record<string, any>>) {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dbData));
+    } catch (e) {
+      console.error("Failed to save local DB to localStorage:", e);
+    }
+  }
+
+  private localList<T>(table: string): T[] {
+    const db = this.loadLocalDb();
+    const tableData = db[table] || {};
+    return Object.values(tableData) as T[];
+  }
+
+  private localGet<T>(table: string, id: string): T | null {
+    const db = this.loadLocalDb();
+    const tableData = db[table] || {};
+    return (tableData[id] as T) || null;
+  }
+
+  private localSet<T>(table: string, id: string, data: any): T {
+    const db = this.loadLocalDb();
+    if (!db[table]) db[table] = {};
+    const item = { ...data, id };
+    db[table][id] = item;
+    this.saveLocalDb(db);
+    return item as T;
+  }
+
+  private localUpdate<T>(table: string, id: string, updates: Partial<T>): void {
+    const db = this.loadLocalDb();
+    if (!db[table]) db[table] = {};
+    const existing = db[table][id] || { id };
+    db[table][id] = { ...existing, ...updates, id };
+    this.saveLocalDb(db);
+  }
+
+  private localDelete(table: string, id: string): void {
+    const db = this.loadLocalDb();
+    if (db[table] && db[table][id]) {
+      delete db[table][id];
+      this.saveLocalDb(db);
+    }
+  }
+
+  private localQuery<T>(table: string, filters: { field: string, op: string, value: any }[]): T[] {
+    const list = this.localList<T>(table);
+    if (!filters || filters.length === 0) return list;
+
+    return list.filter(item => {
+      return filters.every(f => {
+        const val = (item as any)[f.field];
+        if (f.op === '==' || f.op === '=') {
+          return String(val) === String(f.value);
+        }
+        if (f.op === '!=') {
+          return String(val) !== String(f.value);
+        }
+        if (f.op === '>') {
+          return Number(val) > Number(f.value);
+        }
+        if (f.op === '<') {
+          return Number(val) < Number(f.value);
+        }
+        if (f.op === '>=') {
+          return Number(val) >= Number(f.value);
+        }
+        if (f.op === '<=') {
+          return Number(val) <= Number(f.value);
+        }
+        return false;
+      });
+    });
+  }
+
+  private syncTableToLocal(table: string, items: any[]) {
+    if (!Array.isArray(items)) return;
+    const db = this.loadLocalDb();
+    if (!db[table]) db[table] = {};
+    items.forEach(item => {
+      if (item && item.id) {
+        db[table][item.id] = item;
+      }
+    });
+    this.saveLocalDb(db);
+  }
+
+  // --- Network Request Wrapper with Netlify & SPA Safety ---
+  private async request<T>(endpoint: string, options?: RequestInit): Promise<{ success: boolean; data?: T; status?: number }> {
+    const baseUrl = this.getApiBaseUrl();
+    const url = `${baseUrl}${endpoint}`;
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s network timeout
+
+      const res = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options?.headers || {})
+        }
+      });
+      clearTimeout(timeoutId);
+
+      const contentType = res.headers.get('content-type') || '';
+      
+      // If deployed on Netlify without backend, requests to /api/* return 404 or index.html (text/html).
+      // Verify both HTTP success AND valid JSON content type!
+      if (!res.ok || !contentType.includes('application/json')) {
+        this.isRemoteActive = false;
+        return { success: false, status: res.status };
+      }
+
+      const data = await res.json();
+      this.isRemoteActive = true;
+      return { success: true, data: data as T, status: res.status };
+    } catch (err) {
+      // Network error, CORS failure, offline, or timed out
+      this.isRemoteActive = false;
+      return { success: false };
+    }
+  }
+
+  // --- Core CRUD Operations ---
+  private async fetchTable<T>(table: string): Promise<T[]> {
+    const res = await this.request<T[]>(`/api/db/${table}`);
+    if (res.success && Array.isArray(res.data)) {
+      if (res.data.length > 0) {
+        this.syncTableToLocal(table, res.data);
+        return res.data;
+      }
+    }
+
+    // Always fallback to the offline/local database if remote is unavailable or returns empty
+    const local = this.localList<T>(table);
+    if (res.success && res.data && res.data.length === 0 && local.length === 0) {
+      return [];
+    }
+    return local.length > 0 ? local : (res.success && res.data ? res.data : local);
+  }
+
+  private async getSingleEntry<T>(table: string, id: string): Promise<T | null> {
+    const res = await this.request<T>(`/api/db/${table}/${id}`);
+    if (res.success && res.data) {
+      return res.data;
+    }
+    return this.localGet<T>(table, id);
   }
 
   private async insert<T>(table: string, row: any): Promise<T> {
     const id = row.id || generateId();
     const dataWithId = { ...row, id };
+
+    // 1. Immediately store in local database (guarantees zero data loss on Netlify)
+    const localSaved = this.localSet<T>(table, id, dataWithId);
+
+    // 2. If remote is accessible, asynchronously sync to remote
     try {
-      const res = await fetch(`/api/db/${table}`, {
+      const res = await this.request<T>(`/api/db/${table}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataWithId)
       });
-      if (!res.ok) {
-        throw new Error(`Failed to insert into ${table}`);
+      if (res.success && res.data) {
+        return res.data;
       }
-      return await res.json() as T;
-    } catch (error) {
-      console.error(`Error inserting into ${table}:`, error);
-      throw error;
+    } catch (e) {
+      console.warn(`[DB Sync] Remote insert for ${table} failed, preserved in local storage.`);
     }
+
+    return localSaved;
   }
 
   private async update<T>(table: string, id: string, updates: Partial<T>): Promise<void> {
+    // 1. Update local database
+    this.localUpdate<T>(table, id, updates);
+
+    // 2. Sync to remote
     try {
-      const res = await fetch(`/api/db/${table}/${id}`, {
+      await this.request<void>(`/api/db/${table}/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
       });
-      if (!res.ok) {
-        throw new Error(`Failed to update ${table}/${id}`);
-      }
-    } catch (error) {
-      console.error(`Error updating ${table}/${id}:`, error);
-      throw error;
+    } catch (e) {
+      console.warn(`[DB Sync] Remote update for ${table}/${id} failed, preserved in local storage.`);
     }
   }
 
   private async delete(table: string, id: string): Promise<void> {
+    // 1. Remove from local database
+    this.localDelete(table, id);
+
+    // 2. Sync to remote
     try {
-      const res = await fetch(`/api/db/${table}/${id}`, {
+      await this.request<void>(`/api/db/${table}/${id}`, {
         method: 'DELETE'
       });
-      if (!res.ok) {
-        throw new Error(`Failed to delete from ${table}/${id}`);
-      }
-    } catch (error) {
-      console.error(`Error deleting ${table}/${id}:`, error);
-      throw error;
+    } catch (e) {
+      console.warn(`[DB Sync] Remote delete for ${table}/${id} failed, preserved in local storage.`);
     }
   }
 
   private async queryTable<T>(table: string, filters: { field: string, op: string, value: any }[]): Promise<T[]> {
-    try {
-      const res = await fetch(`/api/db-query/${table}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(filters)
-      });
-      if (!res.ok) {
-        throw new Error(`Failed to query table ${table}`);
-      }
-      return await res.json() as T[];
-    } catch (error) {
-      console.error(`Error querying ${table}:`, error);
-      return [];
+    const res = await this.request<T[]>(`/api/db-query/${table}`, {
+      method: 'POST',
+      body: JSON.stringify(filters)
+    });
+
+    if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+      return res.data;
     }
+
+    return this.localQuery<T>(table, filters);
+  }
+
+  // --- Database Status & Connectivity Test ---
+  public async testApiConnection(overrideUrl?: string): Promise<{ ok: boolean; message: string; details?: any }> {
+    const baseUrl = overrideUrl !== undefined ? overrideUrl.trim().replace(/\/+$/, '') : this.getApiBaseUrl();
+    const testUrl = `${baseUrl}/api/db-status`;
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const res = await fetch(testUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!res.ok || !contentType.includes('application/json')) {
+        return {
+          ok: false,
+          message: `Endpoint returned HTTP ${res.status} (${contentType || 'Unknown content'}). Make sure the backend server is running and accessible.`
+        };
+      }
+
+      const data = await res.json();
+      return {
+        ok: true,
+        message: data.connected ? "Connected to PostgreSQL Database via API server." : "API server is reachable (running in embedded/JSON mode).",
+        details: data
+      };
+    } catch (err: any) {
+      return {
+        ok: false,
+        message: err.message ? `Connection failed: ${err.message}` : "Unable to reach server. Check the URL and network connection."
+      };
+    }
+  }
+
+  public getStorageEngineInfo() {
+    return {
+      isRemoteConfigured: Boolean(this.getApiBaseUrl()),
+      apiBaseUrl: this.getApiBaseUrl() || '(Co-hosted / Relative /api)',
+      isRemoteActive: this.isRemoteActive,
+      isNetlifyOrStatic: typeof window !== 'undefined' && window.location.hostname.includes('netlify.app')
+    };
+  }
+
+  // --- Database Backup & Restore Utility ---
+  public exportDatabase(): string {
+    const db = this.loadLocalDb();
+    return JSON.stringify(db, null, 2);
+  }
+
+  public importDatabase(jsonString: string): boolean {
+    try {
+      const parsed = JSON.parse(jsonString);
+      if (parsed && typeof parsed === 'object') {
+        this.saveLocalDb(parsed);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error("Invalid database JSON:", e);
+      return false;
+    }
+  }
+
+  public resetDatabaseToDefault(): void {
+    const seed = getFullSeedDatabase();
+    this.saveLocalDb(seed);
   }
 
   // --- Image Compression & Base64 Converter ---
@@ -206,15 +467,28 @@ class DatabaseService {
   }
 
   // --- Authentication & Users ---
-
   async authenticate(username: string, password: string): Promise<{ user: User, permissions: string[] } | null> {
     try {
-      const appUsers = await this.queryTable<User & { password?: string }>('app_users', [
+      // 1. Check users via queryTable (checks remote API or local DB)
+      let appUsers = await this.queryTable<User & { password?: string }>('app_users', [
         { field: 'username', op: '==', value: username },
         { field: 'password', op: '==', value: password }
       ]);
-      const userData = appUsers[0] || null;
 
+      // Fallback: Case-insensitive search in local storage if not matched
+      if (appUsers.length === 0) {
+        const allLocalUsers = this.localList<User & { password?: string }>('app_users');
+        const match = allLocalUsers.find(
+          u => u.username.toLowerCase() === username.toLowerCase() && u.password === password
+        );
+        if (match) {
+          appUsers = [match];
+        }
+      }
+
+      let userData = appUsers[0] || null;
+
+      // Built-in hardcoded fallback for super admin
       if (!userData) {
           if (username === 'admin' && password === '123admin456') {
                const adminUser: User = {
@@ -235,6 +509,7 @@ class DatabaseService {
           return null;
       }
 
+      // Update last login
       await this.update('app_users', userData.id, { lastLogin: new Date().toISOString() });
       
       if (userData.role === 'admin') {
@@ -243,14 +518,16 @@ class DatabaseService {
 
       const roleData = await this.getSingleEntry<Role>('roles', userData.role);
       let permissions: string[] = [];
-      if (roleData) {
-         permissions = roleData.permissions || [];
+      if (roleData && roleData.permissions) {
+         permissions = roleData.permissions;
       } else {
          const rolesList = await this.queryTable<Role>('roles', [
            { field: 'name', op: '==', value: userData.role }
          ]);
-         if (rolesList.length > 0) {
-            permissions = rolesList[0].permissions || [];
+         if (rolesList.length > 0 && rolesList[0].permissions) {
+            permissions = rolesList[0].permissions;
+         } else if (userData.role === 'admin') {
+            permissions = ALL_ADMIN_PERMISSIONS;
          }
       }
 

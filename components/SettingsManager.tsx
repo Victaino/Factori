@@ -2,7 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { useSettings, ColorTheme } from '../contexts/SettingsContext';
 import { db, STORAGE_FIX_SQL } from '../services/db';
-import { Moon, Sun, Monitor, Palette, Building, Save, CheckCircle, Upload, Image as ImageIcon, Loader2, Link as LinkIcon, X, AlertCircle, Copy, LayoutDashboard, Terminal, AlertTriangle } from 'lucide-react';
+import { 
+  Moon, Sun, Monitor, Palette, Building, Save, CheckCircle, Upload, 
+  Image as ImageIcon, Loader2, Link as LinkIcon, X, AlertCircle, Copy, 
+  LayoutDashboard, Terminal, AlertTriangle, Download, Database, Globe, 
+  RefreshCw, Check 
+} from 'lucide-react';
 import { DashboardConfig } from '../types';
 
 export const SettingsManager: React.FC = () => {
@@ -14,21 +19,97 @@ export const SettingsManager: React.FC = () => {
   } = useSettings();
 
   const [activeTab, setActiveTab] = useState<'APPEARANCE' | 'ORGANIZATION' | 'DASHBOARD' | 'DATABASE'>('ORGANIZATION');
-  const [dbStatus, setDbStatus] = useState<{ connected: boolean, type: string, error: string | null, host: string } | null>(null);
+  const [dbStatus, setDbStatus] = useState<{ connected: boolean, type: string, error: string | null, host: string, firebaseConfig?: any } | null>(null);
   const [checkingDb, setCheckingDb] = useState(false);
+  const [apiUrlInput, setApiUrlInput] = useState(db.getApiBaseUrl());
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [isTestingUrl, setIsTestingUrl] = useState(false);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
 
   const checkDbStatus = async () => {
     setCheckingDb(true);
     try {
-      const res = await fetch('/api/db-status');
-      if (res.ok) {
-        const data = await res.json();
-        setDbStatus(data);
+      const result = await db.testApiConnection();
+      if (result.ok && result.details) {
+        setDbStatus(result.details);
+      } else {
+        setDbStatus({
+          connected: false,
+          type: 'client-offline-engine',
+          error: result.message,
+          host: db.getApiBaseUrl() || window.location.host
+        });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn("Could not fetch DB status:", err);
+      setDbStatus({
+        connected: false,
+        type: 'client-offline-engine',
+        error: err?.message || 'Server unreachable',
+        host: db.getApiBaseUrl() || window.location.host
+      });
     } finally {
       setCheckingDb(false);
+    }
+  };
+
+  const handleTestAndSaveApiUrl = async () => {
+    setIsTestingUrl(true);
+    setTestResult(null);
+    try {
+      const res = await db.testApiConnection(apiUrlInput);
+      setTestResult(res);
+      if (res.ok) {
+        db.setApiBaseUrl(apiUrlInput);
+        await checkDbStatus();
+      }
+    } catch (e: any) {
+      setTestResult({ ok: false, message: e.message || 'Failed to connect' });
+    } finally {
+      setIsTestingUrl(false);
+    }
+  };
+
+  const handleExportBackup = () => {
+    try {
+      const json = db.exportDatabase();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `factori-database-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert("Failed to export: " + e.message);
+    }
+  };
+
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const success = db.importDatabase(text);
+        if (success) {
+          setImportStatus("Database backup restored successfully! Reloading...");
+          setTimeout(() => window.location.reload(), 1200);
+        } else {
+          setImportStatus("Invalid backup file format.");
+        }
+      } catch (err: any) {
+        setImportStatus("Error parsing file: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleResetSeedData = () => {
+    if (window.confirm("Are you sure you want to reset the database to factory demo defaults? Any changes made will be overwritten with starter data.")) {
+      db.resetDatabaseToDefault();
+      window.location.reload();
     }
   };
 
@@ -485,113 +566,179 @@ export const SettingsManager: React.FC = () => {
 
           {activeTab === 'DATABASE' && (
             <div className="space-y-6 animate-fade-in text-gray-700">
-              <div className="border-b pb-4">
-                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <Terminal size={20} className="text-primary-600" /> Relational Database Diagnostics & Status
-                </h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  Monitor and verify the active connection status of your relational PostgreSQL engine and the Firebase SQL Connect identity provider.
-                </p>
+              <div className="border-b pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <Database size={20} className="text-primary-600" /> Database Engine & Cloud Deployment Settings
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Manage data storage, external backend connections, and backups for Netlify, preview, and production environments.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={checkDbStatus}
+                    disabled={checkingDb}
+                    className="px-3 py-1.5 border rounded-lg text-xs font-semibold bg-white text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 shadow-sm transition-all"
+                  >
+                    <RefreshCw size={14} className={checkingDb ? 'animate-spin text-primary-600' : 'text-gray-500'} />
+                    {checkingDb ? 'Testing...' : 'Check Health'}
+                  </button>
+                </div>
               </div>
 
-              {dbStatus ? (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* PostgreSQL Storage Status Card */}
-                    <div className={`border rounded-xl p-6 transition-all shadow-sm ${dbStatus.connected ? 'bg-emerald-50/50 border-emerald-200' : 'bg-amber-50/30 border-amber-200'}`}>
-                      <div className="flex items-center gap-3 border-b pb-3 mb-4">
-                        <div className={`p-2 rounded-lg text-white ${dbStatus.connected ? 'bg-emerald-500' : 'bg-amber-500'}`}>
-                          {dbStatus.connected ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-gray-900 text-sm">PostgreSQL (Cloud SQL)</h4>
-                          <span className={`text-xs px-2 py-0.5 rounded font-medium mt-1 inline-block ${dbStatus.connected ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                            {dbStatus.connected ? 'Active Connection' : 'Unreachable - Standby Fallback'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2 text-xs">
-                        <div className="grid grid-cols-3 font-semibold text-gray-500"><span>Target Host:</span><span className="col-span-2 font-mono text-gray-900 truncate">{dbStatus.host || 'N/A'}</span></div>
-                        <div className="grid grid-cols-3 font-semibold text-gray-500"><span>Database Port:</span><span className="col-span-2 text-gray-900 font-mono">5432</span></div>
-                        {dbStatus.error && (
-                          <div className="mt-3 bg-red-50 text-red-700 p-2 rounded text-xxs font-mono overflow-auto max-h-16 border border-red-100">
-                            Error: {dbStatus.error}
-                          </div>
-                        )}
-                      </div>
+              {/* Status Overview Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Active Storage Engine Card */}
+                <div className={`border rounded-xl p-5 transition-all shadow-sm ${
+                  dbStatus?.connected ? 'bg-emerald-50/60 border-emerald-200' : 'bg-blue-50/50 border-blue-200'
+                }`}>
+                  <div className="flex items-center gap-3 border-b pb-3 mb-3">
+                    <div className={`p-2 rounded-lg text-white ${dbStatus?.connected ? 'bg-emerald-500' : 'bg-blue-500'}`}>
+                      {dbStatus?.connected ? <CheckCircle size={18} /> : <Database size={18} />}
                     </div>
-
-                    {/* Firebase SQL Connect Instance Card */}
-                    <div className={`border rounded-xl p-6 transition-all shadow-sm ${dbStatus.firebaseConfig ? 'bg-emerald-50/50 border-emerald-200' : 'bg-amber-50/30 border-amber-200'}`}>
-                      <div className="flex items-center gap-3 border-b pb-3 mb-4">
-                        <div className={`p-2 rounded-lg text-white ${dbStatus.firebaseConfig ? 'bg-emerald-500' : 'bg-amber-500'}`}>
-                          {dbStatus.firebaseConfig ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-gray-900 text-sm">Firebase SQL Connect</h4>
-                          <span className={`text-xs px-2 py-0.5 rounded font-medium mt-1 inline-block ${dbStatus.firebaseConfig ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'}`}>
-                            {dbStatus.firebaseConfig ? 'Ready & Verified' : 'Standby Mode'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2 text-xs">
-                        <div className="grid grid-cols-3 font-semibold text-gray-500"><span>Project ID:</span><span className="col-span-2 font-mono text-gray-900 truncate">{dbStatus.firebaseConfig?.projectId || 'Not Configured'}</span></div>
-                        <div className="grid grid-cols-3 font-semibold text-gray-500"><span>Auth Domain:</span><span className="col-span-2 text-gray-900 font-mono truncate">{dbStatus.firebaseConfig?.authDomain || 'N/A'}</span></div>
-                        <div className="grid grid-cols-3 font-semibold text-gray-500"><span>Database core:</span><span className="col-span-2 text-gray-900 truncate">{dbStatus.firebaseConfig?.firestoreDatabaseId || 'N/A'}</span></div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Resilient Local Sync Notification */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 text-blue-800 flex items-start gap-3">
-                    <Terminal size={20} className="text-blue-600 mt-0.5 shrink-0" />
                     <div>
-                      <p className="font-bold text-blue-900 text-sm">Resilient Embedded Storage Strategy</p>
-                      <p className="text-xs leading-relaxed mt-1">
-                        Your application operates an **offline-first developer storage engine**. Reads and writes will interact with your high-speed, secure **PostgreSQL Cloud SQL instance** whenever connected, but will automatically direct data writes to your isolated **local JSON sandbox** whenever database sockets are timed out or unreachable, guarding database speed and preventing loss of data.
-                      </p>
+                      <h4 className="font-bold text-gray-900 text-sm">
+                        {dbStatus?.connected ? 'Cloud SQL PostgreSQL' : 'Offline-First Browser Engine'}
+                      </h4>
+                      <span className={`text-xs px-2 py-0.5 rounded font-medium mt-0.5 inline-block ${
+                        dbStatus?.connected ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {dbStatus?.connected ? 'Active Live Connection' : 'High-Speed Client Storage'}
+                      </span>
                     </div>
                   </div>
 
-                  {!dbStatus.connected && (
-                    <div className="bg-white border rounded-xl p-6 space-y-4 shadow-sm">
-                      <h4 className="font-bold text-gray-900 text-sm">How to authorize a public socket on your PostgreSQL DB:</h4>
-                      <ol className="list-decimal list-inside space-y-2 text-xs text-gray-600">
-                        <li>Open the <strong>Google Cloud Console</strong> and find your SQL instances.</li>
-                        <li>Select database instance <code className="bg-gray-100 px-1 py-0.5 rounded text-primary-700">factori</code>.</li>
-                        <li>Go to <strong>Connections</strong> &rarr; under <strong>Authorized Networks</strong>, add <code className="bg-gray-100 px-1 py-0.5 rounded text-indigo-700">0.0.0.0/0</code> temporarily to authorize public preview socket access.</li>
-                        <li>Click <strong>Save</strong> and wait a few moments for the setting changes to deploy on Google Cloud.</li>
-                      </ol>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between text-gray-600">
+                      <span>Backend Target:</span>
+                      <span className="font-mono text-gray-900 truncate max-w-[200px]">
+                        {db.getApiBaseUrl() || '(Local / Co-hosted)'}
+                      </span>
                     </div>
-                  )}
-
-                  {/* Test Connection Button */}
-                  <div className="flex justify-end pt-2">
-                    <button
-                      type="button"
-                      onClick={checkDbStatus}
-                      disabled={checkingDb}
-                      className="px-4 py-2 border rounded-lg text-sm font-semibold bg-white text-gray-700 hover:bg-gray-50 flex items-center gap-2 shadow-sm transition-all"
-                    >
-                      {checkingDb ? (
-                        <>
-                          <Loader2 size={16} className="animate-spin text-primary-600" /> Refreshing Status...
-                        </>
-                      ) : (
-                        <>
-                          <Terminal size={16} className="text-gray-500" /> Refresh Diagnostics
-                        </>
-                      )}
-                    </button>
+                    <div className="flex justify-between text-gray-600">
+                      <span>Platform Compatibility:</span>
+                      <span className="text-emerald-700 font-medium">Netlify, Cloud Run, Local</span>
+                    </div>
+                    <div className="flex justify-between text-gray-600">
+                      <span>Persistence Status:</span>
+                      <span className="text-gray-900 font-semibold">Active & Persistent</span>
+                    </div>
                   </div>
                 </div>
-              ) : (
-                <div className="flex items-center justify-center p-12">
-                  <Loader2 size={32} className="animate-spin text-primary-600" />
+
+                {/* Netlify Deployment Guide Card */}
+                <div className="border border-purple-200 bg-purple-50/40 rounded-xl p-5 shadow-sm">
+                  <div className="flex items-center gap-3 border-b pb-3 mb-3 border-purple-100">
+                    <div className="p-2 rounded-lg text-white bg-purple-600">
+                      <Globe size={18} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900 text-sm">Netlify Static Deployment</h4>
+                      <span className="text-xs px-2 py-0.5 rounded font-medium mt-0.5 inline-block bg-purple-100 text-purple-800">
+                        {typeof window !== 'undefined' && window.location.hostname.includes('netlify.app') ? 'Running on Netlify' : 'Supported'}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-purple-900 leading-relaxed">
+                    When hosted on static CDN platforms like Netlify, all database tables (Products, Inventory, Sales, HR, Payroll) automatically operate in high-performance local persistence mode. Your data is saved directly in your browser.
+                  </p>
                 </div>
-              )}
+              </div>
+
+              {/* Configure Remote Backend URL Section */}
+              <div className="bg-white border rounded-xl p-6 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 border-b pb-3">
+                  <Server size={18} className="text-primary-600" />
+                  <h4 className="font-bold text-gray-900 text-sm">External API Server Connection (Optional)</h4>
+                </div>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  If you run your Factori backend (`server.ts`) as a standalone container on Google Cloud Run, Render, or Railway, provide its public URL below to sync your Netlify frontend with your centralized PostgreSQL database:
+                </p>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1 relative">
+                    <input
+                      type="url"
+                      placeholder="https://your-backend-api.run.app (Leave empty for local default)"
+                      value={apiUrlInput}
+                      onChange={(e) => setApiUrlInput(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-gray-800 placeholder-gray-400"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleTestAndSaveApiUrl}
+                    disabled={isTestingUrl}
+                    className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition-all"
+                  >
+                    {isTestingUrl ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" /> Testing...
+                      </>
+                    ) : (
+                      <>
+                        <Check size={16} /> Save & Test
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {testResult && (
+                  <div className={`p-3 rounded-lg text-xs flex items-center gap-2 border ${
+                    testResult.ok ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'
+                  }`}>
+                    {testResult.ok ? <CheckCircle size={16} className="text-emerald-600 shrink-0" /> : <AlertTriangle size={16} className="text-amber-600 shrink-0" />}
+                    <span>{testResult.message}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Data Backup, Restore & Reset Section */}
+              <div className="bg-white border rounded-xl p-6 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 border-b pb-3">
+                  <Download size={18} className="text-primary-600" />
+                  <h4 className="font-bold text-gray-900 text-sm">Database Backup, Migration & Demo Restore</h4>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Export your full database to a JSON file to transfer between devices or backup your records, or reset to standard demo factory data:
+                </p>
+
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleExportBackup}
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all border border-gray-300 shadow-sm"
+                  >
+                    <Download size={14} /> Export Backup (.json)
+                  </button>
+
+                  <label className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all border border-gray-300 shadow-sm cursor-pointer">
+                    <Upload size={14} /> Import Backup
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleImportBackup}
+                      className="hidden"
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={handleResetSeedData}
+                    className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all border border-red-200 shadow-sm ml-auto"
+                  >
+                    <RefreshCw size={14} /> Reset Demo Data
+                  </button>
+                </div>
+
+                {importStatus && (
+                  <div className="p-3 bg-blue-50 text-blue-800 border border-blue-200 rounded-lg text-xs">
+                    {importStatus}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
