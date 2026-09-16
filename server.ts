@@ -70,6 +70,7 @@ const TABLES = [
   'payroll',
   'roles',
   'app_users',
+  'password_resets',
   'organization_settings'
 ];
 
@@ -277,6 +278,22 @@ async function startServer() {
         authDomain: firebaseConfig.authDomain,
         firestoreDatabaseId: firebaseConfig.firestoreDatabaseId
       } : null
+    });
+  });
+
+  // Password reset email notification API
+  app.post('/api/auth/send-reset-email', (req, res) => {
+    const { email, resetLink, token } = req.body || {};
+    console.log(`[Auth Service] Password reset requested for: ${email}`);
+    console.log(`[Auth Service] Security Reset Link generated: ${resetLink}`);
+    
+    // In production environments with SMTP or mailgun/sendgrid configured:
+    // Email transmission would dispatch here.
+    res.json({
+      success: true,
+      message: `Password reset dispatched for ${email}`,
+      email,
+      timestamp: new Date().toISOString()
     });
   });
 

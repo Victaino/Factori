@@ -15,6 +15,7 @@ export const UserManager: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     username: '',
+    email: '',
     password: '',
     role: '' 
   });
@@ -32,7 +33,7 @@ export const UserManager: React.FC = () => {
     e.preventDefault();
     if (editingId) {
         // Only update password if provided
-        const updates: any = { name: formData.name, role: formData.role };
+        const updates: any = { name: formData.name, email: formData.email, role: formData.role };
         if (formData.password) updates.password = formData.password;
         
         await db.updateAppUser(editingId, updates);
@@ -51,7 +52,7 @@ export const UserManager: React.FC = () => {
 
   const resetForm = () => {
       // Default to first available role or empty
-      setFormData({ name: '', username: '', password: '', role: roles[0]?.name || '' });
+      setFormData({ name: '', username: '', email: '', password: '', role: roles[0]?.name || '' });
       setEditingId(null);
   };
 
@@ -59,6 +60,7 @@ export const UserManager: React.FC = () => {
       setFormData({
           name: u.name,
           username: u.username,
+          email: u.email || '',
           password: '', // Don't show existing password
           role: u.role
       });
@@ -97,6 +99,7 @@ export const UserManager: React.FC = () => {
             <tr>
               <th className="p-4 font-semibold text-gray-600">Name</th>
               <th className="p-4 font-semibold text-gray-600">Username</th>
+              <th className="p-4 font-semibold text-gray-600">Email Address</th>
               <th className="p-4 font-semibold text-gray-600">Role</th>
               <th className="p-4 font-semibold text-gray-600">Last Login</th>
               <th className="p-4 font-semibold text-gray-600 text-right">Actions</th>
@@ -107,6 +110,7 @@ export const UserManager: React.FC = () => {
               <tr key={u.id} className="hover:bg-gray-50">
                 <td className="p-4 font-medium text-gray-800">{u.name}</td>
                 <td className="p-4 text-gray-600">{u.username}</td>
+                <td className="p-4 text-gray-500 font-mono text-xs">{u.email || '-'}</td>
                 <td className="p-4">
                   <span className="px-2 py-1 rounded text-xs font-bold uppercase bg-gray-100 text-gray-700">
                     {u.role}
@@ -150,6 +154,17 @@ export const UserManager: React.FC = () => {
                       value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} />
                   </div>
               )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email Address (for password reset)</label>
+                <input 
+                  type="email" 
+                  placeholder="e.g. user@company.com" 
+                  className="w-full border rounded-lg p-2"
+                  value={formData.email} 
+                  onChange={e => setFormData({...formData, email: e.target.value})} 
+                />
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

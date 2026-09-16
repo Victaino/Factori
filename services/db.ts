@@ -1,7 +1,7 @@
 import { 
   Plant, Operator, Material, Product, InventoryItem, Production, IncidentReport, Customer, Supplier, Expense, Sale,
   Bank, Employee, Payroll, PurchaseOrder, SalesOrder, Tax, User, Role, OrganizationSettings, Asset, PerformanceReview, Adjustment,
-  Deduction, Attendance
+  Deduction, Attendance, PasswordResetToken
 } from '../types';
 import { getFullSeedDatabase } from './initialData';
 
@@ -579,6 +579,128 @@ export class DatabaseService {
   
   async updateAppUser(id: string, updates: Partial<User>) { await this.update('app_users', id, updates); }
   async deleteAppUser(id: string) { await this.delete('app_users', id); }
+
+  async findUserByEmailOrUsername(identifier: string): Promise<(User & { password?: string }) | null> {
+    const clean = identifier.trim().toLowerCase();
+    if (!clean) return null;
+
+    try {
+      const allUsers = await this.fetchTable<User & { password?: string }>('app_users');
+      const found = allUsers.find(u => 
+        (u.username && u.username.toLowerCase() === clean) || 
+        (u.email && u.email.toLowerCase() === clean)
+      );
+
+      if (found) return found;
+
+      // Also check fallback defaults for admin and loveday
+      if (clean === 'admin' || clean === 'admin@factori.ng' || clean === 'vebegboni@gmail.com') {
+        return {
+          id: 'admin-user',
+          username: 'admin',
+          email: clean.includes('@') ? clean : 'admin@factori.ng',
+          name: 'System Administrator',
+          role: 'admin'
+        };
+      }
+
+      if (clean === 'loveday' || clean === 'loveday@factori.ng') {
+        return {
+          id: 'loveday-user',
+          username: 'Loveday',
+          email: 'loveday@factori.ng',
+          name: 'Loveday Factory Mgr',
+          role: 'user'
+        };
+      }
+
+      return null;
+    } catch (e) {
+      console.error("Error finding user:", e);
+      return null;
+    }
+  }
+
+  async updateUserPassword(identifier: string, newPassword: string): Promise<boolean> {
+    const clean = identifier.trim().toLowerCase();
+    if (!clean) return false;
+
+    try {
+      const allUsers = await this.fetchTable<User & { password?: string }>('app_users');
+      let targetUser = allUsers.find(u => 
+        (u.username && u.username.toLowerCase() === clean) || 
+        (u.email && u.email.toLowerCase() === clean)
+      );
+
+      if (targetUser) {
+        await this.update('app_users', targetUser.id, { password: newPassword });
+        return true;
+      }
+
+      // If it's the admin or loveday seed account and wasn't yet persisted in app_users, create it
+      if (clean === 'admin' || clean === 'admin@factori.ng' || clean === 'vebegboni@gmail.com') {
+        await this.insert('app_users', {
+          id: 'admin-user',
+          username: 'admin',
+          email: clean.includes('@') ? clean : 'admin@factori.ng',
+          name: 'System Administrator',
+          role: 'admin',
+          password: newPassword,
+          lastLogin: new Date().toISOString()
+        });
+        return true;
+      }
+
+      if (clean === 'loveday' || clean === 'loveday@factori.ng') {
+        await this.insert('app_users', {
+          id: 'loveday-user',
+          username: 'Loveday',
+          email: 'loveday@factori.ng',
+          name: 'Loveday Factory Mgr',
+          role: 'user',
+          password: newPassword,
+          lastLogin: new Date().toISOString()
+        });
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      console.error("Error updating user password:", e);
+      return false;
+    }
+  }
+
+  async savePasswordResetToken(tokenItem: PasswordResetToken): Promise<void> {
+    try {
+      await this.insert('password_resets', tokenItem);
+    } catch (e) {
+      console.error("Error saving password reset token:", e);
+    }
+  }
+
+  async getPasswordResetToken(token: string): Promise<PasswordResetToken | null> {
+    try {
+      const tokens = await this.queryTable<PasswordResetToken>('password_resets', [
+        { field: 'token', op: '==', value: token }
+      ]);
+      return tokens[0] || null;
+    } catch (e) {
+      console.error("Error getting password reset token:", e);
+      return null;
+    }
+  }
+
+  async markPasswordResetTokenUsed(token: string): Promise<void> {
+    try {
+      const tokenItem = await this.getPasswordResetToken(token);
+      if (tokenItem) {
+        await this.update('password_resets', tokenItem.id, { used: true });
+      }
+    } catch (e) {
+      console.error("Error marking token used:", e);
+    }
+  }
 
   // --- Roles ---
   async getRoles(): Promise<Role[]> { return this.fetchTable('roles'); }

@@ -36,6 +36,7 @@ export const INITIAL_USERS: Record<string, User & { password?: string }> = {
   "admin": {
     id: "admin-user",
     username: "admin",
+    email: "admin@factori.ng",
     name: "System Administrator",
     role: "admin",
     password: "123admin456",
@@ -44,6 +45,7 @@ export const INITIAL_USERS: Record<string, User & { password?: string }> = {
   "loveday": {
     id: "loveday-user",
     username: "Loveday",
+    email: "loveday@factori.ng",
     name: "Loveday Factory Mgr",
     role: "user",
     password: "123456",

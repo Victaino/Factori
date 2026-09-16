@@ -239,10 +239,20 @@ export interface Role {
 export interface User {
   id: string;
   username: string;
+  email?: string;
   password?: string; // Only used for updates, not exposed usually
   name: string;
   role: UserRole;
   lastLogin?: string;
+}
+
+export interface PasswordResetToken {
+  id: string;
+  email: string;
+  token: string;
+  createdAt: string;
+  expiresAt: string;
+  used: boolean;
 }
 
 // --- Global Settings ---
